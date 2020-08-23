@@ -65,3 +65,36 @@ arbitrage_rulings_df.to_csv('arbitrage_rulings.csv', index=False, encoding="UTF-
 # %%
 
 arbitrage_rulings_df = pd.read_csv("arbitrage_rulings.csv", encoding="UTF-8")
+
+#%%
+# Remove the the NEWPAGE token and the page number
+arbitrage_rulings_df["proc_text"] = arbitrage_rulings_df.text.str.replace("NEWPAGE \n\d", "",
+                                                                       regex=True)
+
+print(re.findall("\n+.+\n", arbitrage_rulings_df.proc_text[1]))
+
+#print(arbitrage_rulings_df.proc_text[1])
+#%%
+from deeppavlov import  build_model
+
+#ner_model = build_model(configs.ner.ner_ontonotes_bert, download=True)
+
+#ner_model(['Bob Ross lived in Florida'])
+#%% slovent model
+from navec import Navec
+from slovnet import NER
+from ipymarkup import show_span_ascii_markup as show_markup
+#import numpy as np
+
+text = 'Европейский союз добавил в санкционный список девять политических деятелей из самопровозглашенных республик Донбасса — Донецкой народной республики (ДНР) и Луганской народной республики (ЛНР) — в связи с прошедшими там выборами. Об этом говорится в документе, опубликованном в официальном журнале Евросоюза. В новом списке фигурирует Леонид Пасечник, который по итогам выборов стал главой ЛНР. Помимо него там присутствуют Владимир Бидевка и Денис Мирошниченко, председатели законодательных органов ДНР и ЛНР, а также Ольга Позднякова и Елена Кравченко, председатели ЦИК обеих республик. Выборы прошли в непризнанных республиках Донбасса 11 ноября. На них удержали лидерство действующие руководители и партии — Денис Пушилин и «Донецкая республика» в ДНР и Леонид Пасечник с движением «Мир Луганщине» в ЛНР.'
+text = 'Кассационную  жалобу  Федерального  казенного  учреждения «Объединенное стратегическое командование Южного военного Округа» от 04.09.2013 № 3/12651 по делу № А06-8060/2012 возвратить заявителю. '
+
+text = str(arbitrage_rulings_df.proc_text[1])
+
+navec = Navec.load('slovnet/navec_news_v1_1B_250K_300d_100q.tar')
+ner = NER.load('slovnet/slovnet_ner_news_v1.tar')
+ner.navec(navec)
+
+markup = ner(text)
+#%%
+show_markup(markup.text, markup.spans)
