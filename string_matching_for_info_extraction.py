@@ -31,31 +31,6 @@ matches_only_regex = arbitrage_rulings_df["proc_text"].str.lower().str.extract(r
 
 print(matches_only_regex.dropna())
 
-#%%
-
-
-matches = arbitrage_rulings_df["proc_text"].str.lower().str.extract(r'(?:установил:?\s*)(?P<plaintiff>.+)[ \t\r\f\v](?:\(далее –?.*\))?.*обратил(?:а|о)сь\sв\s.*суд')
-
-
-print(matches.dropna())
-
-
-#%%
-#print(pd.Series('«agro green farm» ').str.extract(r'( green)'))
-
-matches = arbitrage_rulings_df["proc_text"].str.lower().str.extract(r' (.+) .*обратил(?:а|о)сь в .*суд .*к (.+) ')
-
-print(matches.dropna())
-
-#%% other pattern
-#А обратилось в … суд … с заявлением о признании и приведении в исполнение (признании обязательным) иностранного арбитражного решения (решений международного арбитража) (решения Арбитража) (… суда …).
-
-matches_other_pattern = arbitrage_rulings_df["proc_text"].str.lower().str.extract(r'(?:\n|\.)(.+)[ \t\r\f\v](?:\(далее –?.*\))?.*обратил(?:а|о)сь\sв\s.*суд.*?(к\s?(.+))?(?:\n|\.)')
-
-print(matches_other_pattern.dropna())
-
-
-
 
 
 
@@ -69,6 +44,7 @@ dp_ner_pred = pickle.load(open( "deeppavlov/model_pred_tagging_list_all.obj", "r
 # ř corresponds to continuation of the name of an organization
 name_of_companies_list = []
 
+#k=3
 for k in range(len(dp_ner_pred)):
 
     dp_ner_pred_repl_tags = []
@@ -92,25 +68,73 @@ for k in range(len(dp_ner_pred)):
     #sample_captures = re.findall('(?P<Plaintiff>B-ORG(?: I-ORG)*)(?!.*B-ORG) обратил(?:а|о)сь\sв\s.*суд', dp_ner_pred_repl_tags_text)
     #sample_captures = re.findall('(?P<Plaintiff>B-ORG(?: I-ORG)*)^[B]\sобратил(?:а|о)сь\sв\s.*суд', dp_ner_pred_repl_tags_text)
     #sample_captures = re.findall('(?P<Plaintiff>B-ORG(?: I-ORG)*).*\sобратил(?:а|о)сь\sв\s.*суд', dp_ner_pred_repl_tags_text)
+   # captured_match = re.search('(?P<Plaintiff>š+(?: ř+)*)[^řš]+обратил(?:а|о)сь\sв\s.*суд?(.*с\s.*заявлением\s.*к\s(?P<Defendant>š+(?: ř+)*))', dp_ner_pred_repl_tags_text)
     
+  #  captured_match = re.search('(?P<Plaintiff>š+(?: ř+)*)[^řš]+обратил(?:а|о)сь\sв\s.*суд', dp_ner_pred_repl_tags_text)
     captured_match = re.search('(?P<Plaintiff>š+(?: ř+)*)[^řš]+обратил(?:а|о)сь\sв\s.*суд', dp_ner_pred_repl_tags_text)
     
     if captured_match is None:
         name_of_companies_list.append(None)
     else:
-        name_of_company = original_text[captured_match.start(1):(captured_match.end(1)+1)]
-        name_of_companies_list.append(name_of_company)
+        name_of_company = original_text[captured_match.start('Plaintiff'):(captured_match.end('Plaintiff')+1)]
+        name_of_companies_list.append(name_of_company)    
 
 #
 #
 #%%
 print(pd.Series(name_of_companies_list).dropna())
 
+#%% extract the names of defendant firms
+name_of_plaintiffs_list = []
+name_of_defendants_list = []
+
+#k=3
+for k in range(len(dp_ner_pred)):
+
+    dp_ner_pred_repl_tags = []
+    for i, token in enumerate(dp_ner_pred[k][0][0]):
+        if dp_ner_pred[k][1][0][i] == 'B-ORG':
+            #dp_ner_pred_repl_tags.append(dp_ner_pred[k][1][0][i])
+            dp_ner_pred_repl_tags.append('š' * len(token)) # we multiply by the length of the token
+                                                            # to preserve the length of the string
+        elif dp_ner_pred[k][1][0][i] == 'I-ORG':
+            #dp_ner_pred_repl_tags.append(dp_ner_pred[k][1][0][i])
+            dp_ner_pred_repl_tags.append('ř' * len(token))   # I am only using some character that is not
+                                                            # in the text of the rulings (any such charcter would do)
+        else:
+            dp_ner_pred_repl_tags.append(dp_ner_pred[k][0][0][i])
+    
+    dp_ner_pred_repl_tags_text = ' '.join(dp_ner_pred_repl_tags)
+    original_text = ' '.join(dp_ner_pred[k][0][0])
+    
+    assert (len(dp_ner_pred_repl_tags_text) == len(dp_ner_pred_repl_tags_text)), 'length of the strings is not the same'
+    
+    #sample_captures = re.findall('(?P<Plaintiff>B-ORG(?: I-ORG)*)(?!.*B-ORG) обратил(?:а|о)сь\sв\s.*суд', dp_ner_pred_repl_tags_text)
+    #sample_captures = re.findall('(?P<Plaintiff>B-ORG(?: I-ORG)*)^[B]\sобратил(?:а|о)сь\sв\s.*суд', dp_ner_pred_repl_tags_text)
+    #sample_captures = re.findall('(?P<Plaintiff>B-ORG(?: I-ORG)*).*\sобратил(?:а|о)сь\sв\s.*суд', dp_ner_pred_repl_tags_text)
+    captured_match = re.search('(?P<Plaintiff>š+(?: ř+)*)[^řš]+обратил(?:а|о)сь\sв\s.*суд?(.*с\s.*заявлением\s.*к\s(?P<Defendant>š+(?: ř+)*))', dp_ner_pred_repl_tags_text)
+    
+  #  captured_match = re.search('(?P<Plaintiff>š+(?: ř+)*)[^řš]+обратил(?:а|о)сь\sв\s.*суд', dp_ner_pred_repl_tags_text)
+    if captured_match is None:
+        name_of_plaintiffs_list.append(None)
+        name_of_defendants_list.append(None)
+    else:
+        if captured_match.group('Plaintiff') is None:
+            name_of_companies_list.append(None)
+        else:
+            name_of_company = original_text[captured_match.start('Plaintiff'):(captured_match.end('Plaintiff')+1)]
+            name_of_plaintiffs_list.append(name_of_company)
+        
+        if captured_match.group('Defendant') is None:
+            name_of_defendants_list.append(None)
+        else:
+            name_of_defendant = original_text[captured_match.start('Defendant'):(captured_match.end('Defendant')+1)]
+            name_of_defendants_list.append(name_of_defendant)
+
+
 #%% BERT NER predictions
 bert_ner_pred = pickle.load(open( "deeppavlov/bert_pred_tagging_list_all_2.obj", "rb" ))
 
-#%%
-bert_ner_pred = [x[1:] for x in bert_ner_pred] # The first element is always None - we want to remove them
 #%% 
 #now we have additional dimensionfor sentences
 # First dimension - observation
@@ -123,31 +147,6 @@ print(bert_ner_pred[0][12][0][0])
 print(len(bert_ner_pred[0]))   
 
 #%%
-import copy
-flattened_bert_ner_pred = copy.deepcopy(bert_ner_pred)
-
-for i, obs in enumerate(bert_ner_pred):
-    for k in range(len(bert_ner_pred[i])):
-        flattened_bert_ner_pred[i][k][0] = []
-        flattened_bert_ner_pred[i][k][1] = []
-        flattened_bert_ner_pred[i][k][0].extend(bert_ner_pred[i][k][0][0])
-        flattened_bert_ner_pred[i][k][1].extend(bert_ner_pred[i][k][1][0])
-        
-    #flattened_bert_ner_pred[i][0] = list(itertools.chain(*list2d))
-   
-    
-#%% flatten out the sentance dimension
-for i in range(len(bert_ner_pred)):
-    bert_ner_pred[i] = [item for sublist in bert_ner_pred[i] for item in sublist]
-    
-#%%
-flattened_bert_ner_pred = [[None]] * len(bert_ner_pred)     
-for i in range(len(bert_ner_pred)):
-    flattened_bert_ner_pred[i] = [flattened_bert_ner_pred[i].extend(item) for item in bert_ner_pred[i]]
-    
-    
-#%%
-name_of_companies_list = []
 dp_ner_pred_repl_tags_text_list = [None] * len(bert_ner_pred)
 original_text_list = [None] * len(bert_ner_pred)
 
@@ -215,35 +214,39 @@ def clean_comp_name(list_of_comp_names):
     return name_of_companies_list_clean
 
 
-#%%
+#%% cleaning the names of companies
 name_of_companies_list_bert = clean_comp_name(name_of_companies_list_bert)
 name_of_companies_list = clean_comp_name(name_of_companies_list)
-
+name_of_defendants_list = clean_comp_name(name_of_defendants_list)
         
 #%%
 
-arbitrage_rulings_df['extracted_firm_names_ner'] = pd.Series(name_of_companies_list_bert)
-arbitrage_rulings_df.extracted_firm_names_ner.fillna(value=np.nan, inplace=True)
+arbitrage_rulings_df['extracted_plaint_names_ner'] = pd.Series(name_of_companies_list_bert)
+arbitrage_rulings_df.extracted_plaint_names_ner.fillna(value=np.nan, inplace=True)
 
-filter_na_mask = arbitrage_rulings_df.extracted_firm_names_ner.isna()
-arbitrage_rulings_df.loc[filter_na_mask, 'extracted_firm_names_ner'] = pd.Series(name_of_companies_list)[filter_na_mask.values]
-arbitrage_rulings_df.extracted_firm_names_ner.fillna(value=np.nan, inplace=True)
+filter_na_mask = arbitrage_rulings_df.extracted_plaint_names_ner.isna()
+arbitrage_rulings_df.loc[filter_na_mask, 'extracted_plaint_names_ner'] = pd.Series(name_of_companies_list)[filter_na_mask]
+arbitrage_rulings_df.extracted_plaint_names_ner.fillna(value=np.nan, inplace=True)
 
 #%%
-print(arbitrage_rulings_df.extracted_firm_names_ner.dropna())
+print(arbitrage_rulings_df.extracted_plaint_names_ner.dropna())
 
 #%%
 matches_only_regex = matches_only_regex.plaintiff.str.replace('NEWPAGE|NEWPAGE \n\d|УСТАНОВИЛ', '', regex=True, flags=re.IGNORECASE)
 matches_only_regex = matches_only_regex.str.replace('\s\s+', ' ', regex=True, flags=re.IGNORECASE)
 
 #%%
-arbitrage_rulings_df['extracted_firm_names_regex'] = matches_only_regex
-arbitrage_rulings_df.extracted_firm_names_regex.fillna(value=np.nan, inplace=True)
+arbitrage_rulings_df['extracted_plaint_names_regex'] = matches_only_regex
+arbitrage_rulings_df.extracted_plaint_names_regex.fillna(value=np.nan, inplace=True)
 
-arbitrage_rulings_df['extracted_firm_names_any'] = arbitrage_rulings_df['extracted_firm_names_ner']
-filter_na_mask = arbitrage_rulings_df.extracted_firm_names_ner.isna()
-arbitrage_rulings_df.loc[filter_na_mask, 'extracted_firm_names_any'] = arbitrage_rulings_df['extracted_firm_names_regex'][filter_na_mask.values]
-arbitrage_rulings_df.extracted_firm_names_any.fillna(value=np.nan, inplace=True)
+arbitrage_rulings_df['extracted_plaint_names_any'] = arbitrage_rulings_df['extracted_plaint_names_ner']
+filter_na_mask = arbitrage_rulings_df.extracted_plaint_names_ner.isna()
+arbitrage_rulings_df.loc[filter_na_mask, 'extracted_plaint_names_any'] = arbitrage_rulings_df['extracted_plaint_names_regex'][filter_na_mask.values]
+arbitrage_rulings_df.extracted_plaint_names_any.fillna(value=np.nan, inplace=True)
+
+#%%
+arbitrage_rulings_df['extracted_def_names_ner'] = pd.Series(name_of_defendants_list)
+arbitrage_rulings_df.extracted_def_names_ner.fillna(value=np.nan, inplace=True)
 
 #%%
 
