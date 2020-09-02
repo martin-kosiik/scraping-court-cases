@@ -14,8 +14,8 @@ print(re.match(' \(1\)\.pdf$', 'А56-55523-2013__20140221 (1).pdf'))
 print(re.match('dd', 'А56-55523-2013__20140221 (1).pdf'))
 
 
-print('А56-55523-2013__20140221 (1).pdf'[-8:])
-#%% delete the duplicate pdfs
+print(pd.Series('А56-55523-2013__20140221 (1)').str.extract('__(\d{8})( \(\d\))*$')[0])
+#%% check if don't have any non pdf files
 
 folders_of_pdfs = os.listdir('pdf_files')
 for folder in folders_of_pdfs:
@@ -23,7 +23,7 @@ for folder in folders_of_pdfs:
                                                       "pdf_files", folder))
     
     for pdf_file in all_pdf_files_in_folder:
-        if pdf_file[-8:] ==  ' (1).pdf':
+        if pdf_file[-4:] !=  '.pdf':                
             #os.remove(os.path.join(working_directory, "pdf_files", folder, pdf_file))
             print(pdf_file)
         #print(pdf_file)
@@ -34,36 +34,50 @@ for folder in folders_of_pdfs:
 # %%
 extracted_text_list = []
 case_id_list = []
-year_list = []
+#year_list = []
 
 folders_of_pdfs = os.listdir('pdf_files')
 
 for folder in folders_of_pdfs:
-    all_pdf_files_in_folder = os.listdir(os.path.join(working_directory, 
-                                                      "pdf_files", folder))
+    all_pdf_files_in_folder = os.listdir(os.path.join(working_directory, "pdf_files", folder))
     for pdf_file in all_pdf_files_in_folder:
                     
-        with pdfplumber.open(os.path.join("pdf_files", folder, pdf_file)) as pdf:
+        with pdfplumber.open(os.path.join(working_directory, "pdf_files", folder, pdf_file)) as pdf:
             all_text = ''
             
             for pdf_page in pdf.pages:
                 single_page_text = pdf_page.extract_text()
-                all_text = all_text + 'NEWPAGE \n' + single_page_text
-        
+                if single_page_text == None:
+                    print('single page is none.')
+                else:
+                    all_text = all_text + 'NEWPAGE \n' + single_page_text
+            
         extracted_text_list.append(all_text)
-        case_id_list.append(pdf_file[:-4])   # remove the .pdf characters from the str.
-        year_list.append(int(folder))
+        case_id_list.append(pdf_file[:-4])   # remove the .pdf characters from the string
+       # year_list.append(int(folder))
     print('Folder ' + folder + ' finished.')
         
 
 #%%
 arbitrage_rulings_df = pd.DataFrame ({'case_id': case_id_list,
-                                    'year': year_list,
+                                    #'year': year_list,
                                     'text': extracted_text_list})
 
-arbitrage_rulings_df.to_csv('arbitrage_rulings.csv', index=False, encoding="UTF-8")      
-# %%
+arbitrage_rulings_df['ruling_date'] = arbitrage_rulings_df.case_id.str.extract('__(\d{8})( *\(\d\))*$')[0]
+arbitrage_rulings_df['ruling_date'] = pd.to_datetime(arbitrage_rulings_df['ruling_date'], format='%Y%m%d')
 
+arbitrage_rulings_df['starting_year'] = arbitrage_rulings_df.case_id.str.extract('(\d{4})__\d{8}( *\(\d\))*$')[0]
+
+arbitrage_rulings_df['court_id'] = arbitrage_rulings_df.case_id.str.extract('^(А\d\d)')
+
+arbitrage_rulings_df['case_spec_digit'] = arbitrage_rulings_df.case_id.str.extract('^А\d\d-(\d+)-')
+
+
+
+# %%
+arbitrage_rulings_df.to_csv('arbitrage_rulings.csv', index=False, encoding="UTF-8")      
+
+#%%
 arbitrage_rulings_df = pd.read_csv("arbitrage_rulings.csv", encoding="UTF-8")
 
 #%%
