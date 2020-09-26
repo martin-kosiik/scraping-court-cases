@@ -37,9 +37,6 @@ flatten_lists(spark_per_case['Третьи лица'][2])
 
 spark_per_case = spark_per_case.applymap(flatten_lists)
 
-spark_per_case
-
-
 
 spark_per_case.shape
 spark_per_case['Исход дела'].isna().sum()
@@ -66,13 +63,14 @@ spark_per_ruling = spark_per_ruling.dropna(subset=['Резолютивная ч�
 
 spark_per_ruling['Исход дела'].value_counts()
 
+
+
 spark_per_ruling['ruling_day'].isna().sum()
 
 
-spark_per_ruling[]
 
 from razdel import tokenize
-tokens = list(tokenize(spark_per_ruling['Резолютивная часть'][5]))
+#tokens = list(tokenize(spark_per_ruling['Резолютивная часть'][5]))
 #print([_.text for _ in tokens])
 
 tokens_of_all_cases = [list(tokenize(x)) for x in spark_per_ruling['Резолютивная часть'].tolist()]
@@ -106,12 +104,54 @@ tokenized_list_of_sentences = [['this', 'is', 'one', 'basketball'], ['this', 'is
 def identity_tokenizer(text):
     return text
 
-tfidf = TfidfVectorizer(tokenizer=identity_tokenizer, stop_words=None, lowercase=False)
+tfidf = TfidfVectorizer(tokenizer=identity_tokenizer, stop_words=None, lowercase=False, min_df=5, max_df=0.9,
+                        ngram_range=(1, 2))
 tfidf.fit_transform(stemmed_tokens_all_cases)
 
-tfidf.get_feature_names()
-
-clf = MultinomialNB().fit(X_train_tfidf, y_train)
+features = tfidf.fit_transform(stemmed_tokens_all_cases).toarray()
 
 
-#spark_per_ruling['Резолютивная часть'].apply(lambda x: )
+not_labeled_obs_mask = spark_per_ruling['Исход дела'].isna()
+not_labeled_obs_mask.shape
+X_labeled = features[~not_labeled_obs_mask]
+
+# We encode as 1 if the claim is not satisfied and 0 otherwise (partially or fully satisfied)
+ y = (spark_per_ruling['Исход дела'][~not_labeled_obs_mask] == 'Иск не удовлетворен') * 1
+
+
+from sklearn.model_selection import train_test_split
+X_train, X_test, y_train, y_test = train_test_split(X_labeled, y, test_size=0.1, random_state=42)
+
+
+from sklearn.naive_bayes import BernoulliNB
+clf = BernoulliNB().fit(X_train, y_train)
+
+y_train_pred = clf.predict(X_train)
+y_test_pred = clf.predict(X_test)
+
+from sklearn.metrics import classification_report
+print(classification_report(y_train, y_train_pred))
+
+print(classification_report(y_test, y_test_pred))
+
+from sklearn.linear_model import LogisticRegressionCV
+logistic_reg = LogisticRegressionCV(cv=5, random_state=42, penalty='l1', solver='liblinear').fit(X_train, y_train)
+
+y_train_pred = logistic_reg.predict(X_train)
+y_test_pred = logistic_reg.predict(X_test)
+
+print(classification_report(y_train, y_train_pred))
+
+print(classification_report(y_test, y_test_pred))
+
+
+indices = np.argsort(logistic_reg.coef_)
+feature_names = np.array(tfidf.get_feature_names())[indices]
+
+# Words most indicative of the claim not being satisfied
+feature_names[0][-5:]
+
+# Words most indicative of the claim being fully or partially satisfied
+feature_names[0][:5]
+
+np.sort(logistic_reg.coef_)
