@@ -61,4 +61,79 @@ print(bool(re.search('\sсуд\s', 'Экономический  Гомельск
 only_firms_list = [x for x in all_firms_list if not bool(re.search('\sсуд\s', x, flags=re.IGNORECASE))]
 len(only_firms_list)
 
+
+
+
 # Next try to apply Named entity recognition model to detect people and locations
+
+from navec import Navec
+from slovnet import NER
+from ipymarkup import show_span_ascii_markup as show_markup
+
+text = 'Кассационную  жалобу  Федерального  казенного  учреждения «Объединенное стратегическое командование Южного военного Округа» от 04.09.2013 № 3/12651 по делу № А06-8060/2012 возвратить заявителю. '
+
+
+navec = Navec.load('slovnet/navec_news_v1_1B_250K_300d_100q.tar')
+ner = NER.load('slovnet/slovnet_ner_news_v1.tar')
+ner.navec(navec)
+
+markup = ner(text)
+
+#%%
+only_firms_list[15]
+
+
+ner_predictions = [ner(x) for x in only_firms_list]
+
+
+ner_entities = []
+for ner_markup in ner_predictions:
+    ner_ent_list_for_one_obs = []
+    for ner_span in ner_markup.spans:
+        ner_ent_list_for_one_obs.append(ner_span.type)
+    ner_entities.append(ner_ent_list_for_one_obs)
+
+
+zip(ner_predictions, ner_entities)
+
+persons_list = [firm_name for firm_name, ner_label in zip(ner_predictions, ner_entities) if "PER" in ner_label]
+persons_list.__len__()
+
+only_person_list = [firm_name for firm_name, ner_label in zip(only_firms_list, ner_entities) if ner_label == ["PER"]]
+only_person_list.__len__()
+only_person_list
+
+
+#locations_list = [firm_name for firm_name, ner_label in zip(only_firms_list, ner_entities) if "LOC" in ner_label]
+locations_list = [firm_name for firm_name, ner_label in zip(ner_predictions, ner_entities) if "LOC" in ner_label]
+
+locations_list
+
+ner_predictions[36]
+
+
+ner_predictions[36].text[ner_predictions[36].spans[1].start:ner_predictions[36].spans[1].stop]
+
+ner_predictions[36].spans[0].type == "ORG"
+
+
+extracted_locs_list = []
+
+for ner_prediction in ner_predictions:
+    locations_one_obs_list = []
+    for one_ner_span in ner_prediction.spans:
+        if one_ner_span.type == "LOC":
+            start_span = one_ner_span.start
+            end_span = one_ner_span.stop
+            locations_one_obs_list.append(ner_prediction.text[start_span:end_span])
+    extracted_locs_list.append(locations_one_obs_list)
+
+
+[x for x in extracted_locs_list if x != []]
+
+
+
+locations_list.__len__()
+
+#%%
+countries_in_russian = pd.read_csv('countries_in_russian.csv', sep=';')
