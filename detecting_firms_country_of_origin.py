@@ -113,7 +113,7 @@ ner_predictions[36]
 
 
 ner_predictions[36].text[ner_predictions[36].spans[1].start:ner_predictions[36].spans[1].stop]
-
+ner_predictions[36].text
 ner_predictions[36].spans[0].type == "ORG"
 
 
@@ -129,11 +129,34 @@ for ner_prediction in ner_predictions:
     extracted_locs_list.append(locations_one_obs_list)
 
 
-[x for x in extracted_locs_list if x != []]
+extracted_locs_list_non_empty = [x for x in extracted_locs_list if x != []]
 
+
+from razdel import tokenize
+
+list(tokenize(extracted_locs_list_non_empty[0][0]))
+tokens_of_all_cases = [list(tokenize(x)) for x in spark_per_ruling['Резолютивная часть'].tolist()]
+
+tokenized_loc_names = []
+for loc_name in extracted_locs_list_non_empty:
+    loc_name_tokens_list = []
+    for word in loc_name:
+        loc_name_tokens_list.extend(list(tokenize(word)))
+    tokenized_loc_names.append(loc_name_tokens_list)
+
+
+from nltk.stem.snowball import SnowballStemmer
+stemmer = SnowballStemmer("russian")
+
+stemmed_tokens_all_locs = []
+for tokens_list in tokenized_loc_names:
+    lemmatized_tokens = [stemmer.stem(word) for word in [_.text for _ in tokens_list]]
+    stemmed_tokens_all_locs.append(lemmatized_tokens)
 
 
 locations_list.__len__()
 
 #%%
 countries_in_russian = pd.read_csv('countries_in_russian.csv', sep=';')
+
+countries_in_russian['short_name_stemmed'] = countries_in_russian['short_name'].apply(lambda x: stemmer.stem(x))
