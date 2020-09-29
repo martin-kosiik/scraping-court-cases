@@ -20,9 +20,13 @@ spark_per_case = spark_cases.groupby('№').agg(list)
 # this removes nan from every list in the dataframe since nan is not equal to nan
 spark_per_case = spark_per_case.applymap(lambda list_in_cell: [x for x in list_in_cell if x == x])
 spark_per_case
+type(spark_per_case['Третьи лица'][1])
+
 
 def flatten_lists(the_list):
-    if len(the_list) is 0:
+    if not isinstance(the_list, list):
+        out_list = the_list
+    elif len(the_list) is 0:
         out_list = np.nan
     elif len(the_list) is 1:
         out_list = the_list[0]
@@ -44,18 +48,19 @@ spark_per_case['Категория'].isna().sum()
 
 spark_per_case.apply(lambda x: x.isna().sum())
 
+# extract the text of the last ruling in the case (which is in the first place in the dataset)
+spark_per_case['the_last_ruling_text'] = spark_per_case['Резолютивная часть'].apply(lambda x: x[0] if x != [] else [])
+
+spark_per_case['the_last_ruling_text'] = spark_per_case['the_last_ruling_text'].apply(flatten_lists)
+
+spark_per_case['all_rulings_text'] = spark_per_case['Резолютивная часть'].apply(lambda x: '\n '.join(x))
+
+
 
 spark_per_case[['Номер дела', 'Категория', 'Исход дела']].groupby(['Категория', 'Исход дела']).agg('count')
 
-spark_per_ruling[(spark_per_ruling['Резолютивная часть'].isna())]
-
 spark_per_ruling = spark_per_case.explode('Резолютивная часть').reset_index()
-spark_per_ruling
-
-
-spark_per_ruling['ruling_day'] = spark_per_ruling['Резолютивная часть'].str.extract('^.*(\d\d) *\. *\d\d *\. *\d{4}')
-spark_per_ruling['ruling_month'] = spark_per_ruling['Резолютивная часть'].str.extract('^.*\d\d *\. *(\d\d) *\. *\d{4}')
-spark_per_ruling['ruling_year'] = spark_per_ruling['Резолютивная часть'].str.extract('^.*\d\d *\. *\d\d *\. *(\d{4})')
+spark_per_ruling.shape
 
 #arbitrage_rulings_df['ruling_date'] = pd.to_datetime(arbitrage_rulings_df['ruling_date'], format='%Y%m%d')
 
@@ -63,60 +68,67 @@ spark_per_ruling = spark_per_ruling.dropna(subset=['Резолютивная ч�
 
 spark_per_ruling['Исход дела'].value_counts()
 
+spark_per_case['Исход дела'].value_counts()
+
 
 
 spark_per_ruling['ruling_day'].isna().sum()
 
+spark_per_case.shape
+spark_per_case['Состояние'].value_counts()
+
+# Select only closed cases (Завершено) - we don't want on-going cases
+spark_per_case = spark_per_case.loc[spark_per_case['Состояние'] == 'Завершено']
+
+spark_per_case = spark_per_case.dropna(subset=['the_last_ruling_text'])
+
+
+spark_per_case['the_last_ruling_text'].isna().sum()
+spark_per_case['all_rulings_text'].isna().sum()
 
 
 from razdel import tokenize
+from nltk.stem.snowball import SnowballStemmer
 #tokens = list(tokenize(spark_per_ruling['Резолютивная часть'][5]))
 #print([_.text for _ in tokens])
 
-tokens_of_all_cases = [list(tokenize(x)) for x in spark_per_ruling['Резолютивная часть'].tolist()]
+def tokenize_and_stem(list_of_texts):
+    tokens_of_all_cases = [list(tokenize(x)) for x in list_of_texts]
+    stemmer = SnowballStemmer("russian")
+    stemmed_tokens_all_cases = []
+    for tokens_list in tokens_of_all_cases:
+        lemmatized_tokens = [stemmer.stem(word) for word in [_.text for _ in tokens_list]]
+        stemmed_tokens_all_cases.append(lemmatized_tokens)
+    return stemmed_tokens_all_cases
+
+
+stemmed_tokens_last_ruling = tokenize_and_stem(spark_per_case['the_last_ruling_text'].tolist())
+stemmed_tokens_all_rulings = tokenize_and_stem(spark_per_case['all_rulings_text'].tolist())
+
 
 #tokens_of_all_cases = [type(x) for x in spark_per_ruling['Резолютивная часть'].tolist()]
 #tokens_of_all_cases = [x for x in spark_per_ruling['Резолютивная часть'].tolist() if type(x) is float]
 
 
-spark_per_ruling['Резолютивная часть'].isna().sum()
-
-type(spark_per_ruling['Резолютивная часть'].tolist()[0])
-tokens
-
-from nltk.stem.snowball import SnowballStemmer
-stemmer = SnowballStemmer("russian")
-
-stemmed_tokens_all_cases = []
-
-for tokens_list in tokens_of_all_cases:
-    lemmatized_tokens = [stemmer.stem(word) for word in [_.text for _ in tokens_list]]
-    stemmed_tokens_all_cases.append(lemmatized_tokens)
-#print(l)
-
-stemmed_tokens_all_cases[2]
-
-
 from sklearn.feature_extraction.text import TfidfVectorizer
-
-tokenized_list_of_sentences = [['this', 'is', 'one', 'basketball'], ['this', 'is', 'a', 'football']]
 
 def identity_tokenizer(text):
     return text
 
 tfidf = TfidfVectorizer(tokenizer=identity_tokenizer, stop_words=None, lowercase=False, min_df=5, max_df=0.9,
-                        ngram_range=(1, 2))
-tfidf.fit_transform(stemmed_tokens_all_cases)
+                        ngram_range=(1, 3))
 
-features = tfidf.fit_transform(stemmed_tokens_all_cases).toarray()
+##
+features = tfidf.fit_transform(stemmed_tokens_last_ruling).toarray()
 
-
-not_labeled_obs_mask = spark_per_ruling['Исход дела'].isna()
+not_labeled_obs_mask = spark_per_case['Исход дела'].isna()
 not_labeled_obs_mask.shape
 X_labeled = features[~not_labeled_obs_mask]
+X_unlabeled = features[not_labeled_obs_mask]
+
 
 # We encode as 1 if the claim is not satisfied and 0 otherwise (partially or fully satisfied)
- y = (spark_per_ruling['Исход дела'][~not_labeled_obs_mask] == 'Иск не удовлетворен') * 1
+ y = (spark_per_case['Исход дела'][~not_labeled_obs_mask] == 'Иск не удовлетворен') * 1
 
 
 from sklearn.model_selection import train_test_split
@@ -144,6 +156,49 @@ print(classification_report(y_train, y_train_pred))
 
 print(classification_report(y_test, y_test_pred))
 
+y_unlabeled_pred = logistic_reg.predict(X_unlabeled)
+
+logistic_reg = LogisticRegressionCV(cv=5, random_state=42, penalty='l1', solver='liblinear').fit(X_labeled, y)
+
+y_pred = logistic_reg.predict(features)
+y_pred_prob = logistic_reg.predict_proba(features)[:, 1] # probability of y == 1
+
+np.unique(y_pred[not_labeled_obs_mask], return_counts=True)
+
+spark_per_case.index
+
+labeled_obs = (~not_labeled_obs_mask) * 1
+
+dict_data = {'last_ruling_text': spark_per_case['the_last_ruling_text'],
+ 'resolution_label': spark_per_case['Исход дела'],
+ 'labeled': labeled_obs,
+ 'claim_not_sat_dummy': (spark_per_case['Исход дела'] == 'Иск не удовлетворен') * 1,
+ 'claim_not_sat_pred': y_pred, 'claim_not_sat_pred_prob': y_pred_prob}
+spark_per_case['Исход дела'].array
+
+len(y_pred_prob)
+(spark_per_case['Исход дела'] == 'Иск не удовлетворен').shape
+pd.DataFrame(dict_data).to_csv('case_decisions_logit_preds.csv', index=True, encoding='utf-8')
+pd.DataFrame(dict_data).to_excel('case_decisions_logit_preds.xlsx', encoding='utf-8' )
+
+
+
+
+
+
+spark_cases_all = pd.read_excel('spark_cases_export.xlsx', sheet_name='report', header=1, skiprows=2)
+spark_cases_all['№'] =spark_cases_all['№'].fillna(method='ffill').astype(int)
+spark_per_case_all = spark_cases_all.groupby('№').agg(list)
+spark_per_case_all = spark_per_case_all.applymap(lambda list_in_cell: [x for x in list_in_cell if x == x])
+
+spark_per_case_all['Резолютивная часть'].apply(lambda x: x== []).sum()
+spark_per_case_all[spark_per_case_all['Резолютивная часть'].apply(lambda x: x== [])]
+## text from all rulimgs
+
+
+# Predict on the whole data
+# Use only the last ruling
+# exclude Обжалуется and
 
 indices = np.argsort(logistic_reg.coef_)
 feature_names = np.array(tfidf.get_feature_names())[indices]
