@@ -1,5 +1,6 @@
 import pandas as pd
 import os
+import re
 import numpy as np
 working_directory = "C:/Users/marti/OneDrive/Plocha/RA_work/scraping_court_cases"
 os.chdir(working_directory)
@@ -19,27 +20,7 @@ spark_per_case = spark_cases.groupby('№').agg(list)
 
 # this removes nan from every list in the dataframe since nan is not equal to nan
 spark_per_case = spark_per_case.applymap(lambda list_in_cell: [x for x in list_in_cell if x == x])
-spark_per_case
-type(spark_per_case['Третьи лица'][1])
 
-
-def flatten_lists(the_list):
-    if not isinstance(the_list, list):
-        out_list = the_list
-    elif len(the_list) is 0:
-        out_list = np.nan
-    elif len(the_list) is 1:
-        out_list = the_list[0]
-    else:
-        out_list = the_list
-    return out_list
-
-
-spark_per_case['Третьи лица'][1]
-
-flatten_lists(spark_per_case['Третьи лица'][2])
-
-spark_per_case = spark_per_case.applymap(flatten_lists)
 
 
 spark_per_case.shape
@@ -48,12 +29,48 @@ spark_per_case['Категория'].isna().sum()
 
 spark_per_case.apply(lambda x: x.isna().sum())
 
+def flatten_lists(the_list):
+    if not isinstance(the_list, list):
+        out_list = the_list
+    elif len(the_list) == 0:
+        out_list = np.nan
+    elif len(the_list) == 1:
+        out_list = the_list[0]
+    else:
+        out_list = the_list
+    return out_list
+
 # extract the text of the last ruling in the case (which is in the first place in the dataset)
 spark_per_case['the_last_ruling_text'] = spark_per_case['Резолютивная часть'].apply(lambda x: x[0] if x != [] else [])
-
 spark_per_case['the_last_ruling_text'] = spark_per_case['the_last_ruling_text'].apply(flatten_lists)
-
 spark_per_case['all_rulings_text'] = spark_per_case['Резолютивная часть'].apply(lambda x: '\n '.join(x))
+
+# Ad-hoc pre-selection algorithm
+#step 1: pick the latest ruling
+# -if it's also the only ruling--proceed to step 2
+# -otherwise, if it contains "оставить без изменения" (or or and?) "жалобу - без удовлетворения", drop the ruling and proceed to step 1
+# -otherwise, if it does not contain ... proceed to step 2
+
+def pre_sel_alg(rulings_list):
+    if rulings_list == []:
+        output_text = []
+    elif len(rulings_list) == 1:
+        output_text = rulings_list[0]
+    else:
+        for ruling_text in rulings_list:
+            output_text = ruling_text
+            no_change_phrase = '(?:жалобу\s+-*\s*без удовлетворения|оставить\sбез\sизменения)'
+            contains_no_change_phrase = bool(re.search(no_change_phrase, ruling_text, flags=re.IGNORECASE))
+            if not contains_no_change_phrase:
+                break
+    return output_text
+
+
+spark_per_case['pre_sel_ruling_text'] = spark_per_case['Резолютивная часть'].apply(pre_sel_alg)
+
+
+
+spark_per_case = spark_per_case.applymap(flatten_lists)
 
 
 
@@ -64,15 +81,6 @@ spark_per_ruling.shape
 
 #arbitrage_rulings_df['ruling_date'] = pd.to_datetime(arbitrage_rulings_df['ruling_date'], format='%Y%m%d')
 
-spark_per_ruling = spark_per_ruling.dropna(subset=['Резолютивная часть'])
-
-spark_per_ruling['Исход дела'].value_counts()
-
-spark_per_case['Исход дела'].value_counts()
-
-
-
-spark_per_ruling['ruling_day'].isna().sum()
 
 spark_per_case.shape
 spark_per_case['Состояние'].value_counts()
@@ -80,7 +88,8 @@ spark_per_case['Состояние'].value_counts()
 # Select only closed cases (Завершено) - we don't want on-going cases
 spark_per_case = spark_per_case.loc[spark_per_case['Состояние'] == 'Завершено']
 
-spark_per_case = spark_per_case.dropna(subset=['the_last_ruling_text'])
+spark_per_case = spark_per_case.dropna(subset=['pre_sel_ruling_text'])
+spark_per_case.shape
 
 
 spark_per_case['the_last_ruling_text'].isna().sum()
@@ -102,7 +111,7 @@ def tokenize_and_stem(list_of_texts):
     return stemmed_tokens_all_cases
 
 
-stemmed_tokens_last_ruling = tokenize_and_stem(spark_per_case['the_last_ruling_text'].tolist())
+stemmed_tokens_last_ruling = tokenize_and_stem(spark_per_case['pre_sel_ruling_text'].tolist())
 stemmed_tokens_all_rulings = tokenize_and_stem(spark_per_case['all_rulings_text'].tolist())
 
 
@@ -132,7 +141,7 @@ X_unlabeled = features[not_labeled_obs_mask]
 
 
 from sklearn.model_selection import train_test_split
-X_train, X_test, y_train, y_test = train_test_split(X_labeled, y, test_size=0.1, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(X_labeled, y, test_size=0.1, random_state=43)
 
 
 from sklearn.naive_bayes import BernoulliNB
@@ -165,7 +174,16 @@ y_pred_prob = logistic_reg.predict_proba(features)[:, 1] # probability of y == 1
 
 np.unique(y_pred[not_labeled_obs_mask], return_counts=True)
 
-spark_per_case.index
+# for no. 69 and 70 and 47 correct label should be 0
+y_pred[spark_per_case.index == 69]
+y_pred[spark_per_case.index == 70]
+y_pred[spark_per_case.index == 47]
+
+
+# for cases no. 15 and 19 correct label is 1
+y_pred[spark_per_case.index == 15]
+y_pred[spark_per_case.index == 19]
+
 
 labeled_obs = (~not_labeled_obs_mask) * 1
 
@@ -195,6 +213,9 @@ spark_per_case_all['Резолютивная часть'].apply(lambda x: x== []
 spark_per_case_all[spark_per_case_all['Резолютивная часть'].apply(lambda x: x== [])]
 ## text from all rulimgs
 
+
+pd.DataFrame(spark_per_case.index[spark_per_case['Резолютивная часть'].isna()]).to_csv('spark_cases_missing_ruling.csv', index = False)
+#spark_per_case.index[spark_per_case['Резолютивная часть'].isna()].to_csv('spark_cases_missing_ruling.csv')
 
 # Predict on the whole data
 # Use only the last ruling
