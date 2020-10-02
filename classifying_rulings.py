@@ -111,8 +111,12 @@ def tokenize_and_stem(list_of_texts):
     return stemmed_tokens_all_cases
 
 
-stemmed_tokens_last_ruling = tokenize_and_stem(spark_per_case['pre_sel_ruling_text'].tolist())
+stemmed_tokens_pre_sel_ruling = tokenize_and_stem(spark_per_case['pre_sel_ruling_text'].tolist())
+stemmed_tokens_last_ruling = tokenize_and_stem(spark_per_case['the_last_ruling_text'].tolist())
 stemmed_tokens_all_rulings = tokenize_and_stem(spark_per_case['all_rulings_text'].tolist())
+
+ y = (spark_per_case['Исход дела'][~not_labeled_obs_mask] == 'Иск не удовлетворен') * 1
+not_labeled_obs_mask = spark_per_case['Исход дела'].isna()
 
 
 #tokens_of_all_cases = [type(x) for x in spark_per_ruling['Резолютивная часть'].tolist()]
@@ -120,54 +124,118 @@ stemmed_tokens_all_rulings = tokenize_and_stem(spark_per_case['all_rulings_text'
 
 
 from sklearn.feature_extraction.text import TfidfVectorizer
-
-def identity_tokenizer(text):
-    return text
-
-tfidf = TfidfVectorizer(tokenizer=identity_tokenizer, stop_words=None, lowercase=False, min_df=5, max_df=0.9,
-                        ngram_range=(1, 3))
-
-##
-features = tfidf.fit_transform(stemmed_tokens_last_ruling).toarray()
-
-not_labeled_obs_mask = spark_per_case['Исход дела'].isna()
-not_labeled_obs_mask.shape
-X_labeled = features[~not_labeled_obs_mask]
-X_unlabeled = features[not_labeled_obs_mask]
-
-
-# We encode as 1 if the claim is not satisfied and 0 otherwise (partially or fully satisfied)
- y = (spark_per_case['Исход дела'][~not_labeled_obs_mask] == 'Иск не удовлетворен') * 1
-
-
 from sklearn.model_selection import train_test_split
-X_train, X_test, y_train, y_test = train_test_split(X_labeled, y, test_size=0.1, random_state=43)
-
-
-from sklearn.naive_bayes import BernoulliNB
-clf = BernoulliNB().fit(X_train, y_train)
-
-y_train_pred = clf.predict(X_train)
-y_test_pred = clf.predict(X_test)
-
 from sklearn.metrics import classification_report
-print(classification_report(y_train, y_train_pred))
-
-print(classification_report(y_test, y_test_pred))
-
 from sklearn.linear_model import LogisticRegressionCV
-logistic_reg = LogisticRegressionCV(cv=5, random_state=42, penalty='l1', solver='liblinear').fit(X_train, y_train)
 
-y_train_pred = logistic_reg.predict(X_train)
-y_test_pred = logistic_reg.predict(X_test)
 
-print(classification_report(y_train, y_train_pred))
+class LogitReg:
+    def __init__(self, stemmed_tokens, rulings_labels=spark_per_case['Исход дела'], rnd_state=42):
+        self.stemmed_tokens = stemmed_tokens
+        self.rulings_labels = rulings_labels
+        self.rnd_state = rnd_state
+        self.not_labeled_obs_mask = self.rulings_labels.isna()
+        self.y = (self.rulings_labels[~self.not_labeled_obs_mask] == 'Иск не удовлетворен') * 1
+        def identity_tokenizer(text):
+            return text
+        tfidf = TfidfVectorizer(tokenizer=identity_tokenizer, stop_words=None, lowercase=False, min_df=5, max_df=0.9,
+                                ngram_range=(1, 3))
+        self.features = tfidf.fit_transform(self.stemmed_tokens).toarray()
 
-print(classification_report(y_test, y_test_pred))
+    def fit_on_train_set(self, test_set_prop=0.1):
+        X_labeled = self.features[~self.not_labeled_obs_mask]
+        self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(X_labeled,
+                                                                                 self.y, test_size=test_set_prop, random_state=self.rnd_state)
+        self.log_reg_model = LogisticRegressionCV(cv=5, random_state=self.rnd_state, penalty='l1', solver='liblinear').fit(self.X_train, self.y_train)
 
-y_unlabeled_pred = logistic_reg.predict(X_unlabeled)
+    def get_clas_report(self, use_data='test'):
+        if use_data == 'train':
+            print(classification_report(self.y_train, self.log_reg_model.predict(self.X_train)))
+        elif use_data == 'test':
+            print(classification_report(self.y_test, self.log_reg_model.predict(self.X_test)))
+        else:
+            print("Error: The 'use_data' argument should be either 'train' or 'test'.")
 
-logistic_reg = LogisticRegressionCV(cv=5, random_state=42, penalty='l1', solver='liblinear').fit(X_labeled, y)
+    def fit_on_whole_data(self):
+        X_labeled = self.features[~self.not_labeled_obs_mask]
+        self.log_reg_model = LogisticRegressionCV(cv=5, random_state=self.rnd_state, penalty='l1', solver='liblinear').fit(X_labeled, self.y)
+
+    def get_preds_on_whole_data(self):
+        return self.log_reg_model.predict(self.features)
+
+    def get_proba_on_whole_data(self):
+        return self.log_reg_model.predict_proba(self.features)
+
+    def create_pred_df(self, ruling_texts=spark_per_case['the_last_ruling_text']):
+        labeled_obs = (~self.not_labeled_obs_mask) * 1
+
+        dict_data = {'last_ruling_text': ruling_texts,
+                    'resolution_label': self.rulings_labels,
+                    'labeled': labeled_obs,
+                    'claim_not_sat_dummy': (self.rulings_labels == 'Иск не удовлетворен') * 1,
+                    'claim_not_sat_pred': self.log_reg_model.predict(self.features),
+                    'claim_not_sat_pred_prob': self.log_reg_model.predict_proba(self.features)[:, 1]}
+
+        return pd.DataFrame(dict_data)
+
+
+
+
+
+
+
+
+logit_reg_last_rul = LogitReg(stemmed_tokens_last_ruling)
+logit_reg_last_rul.fit_on_train_set(test_set_prop=0.15)
+logit_reg_last_rul.get_clas_report()
+
+
+
+logit_reg_pre_sel_rul = LogitReg(stemmed_tokens_pre_sel_ruling)
+logit_reg_pre_sel_rul.fit_on_train_set(test_set_prop=0.15)
+logit_reg_pre_sel_rul.get_clas_report()
+logit_reg_pre_sel_rul.fit_on_whole_data()
+np.unique(logit_reg_pre_sel_rul.get_preds_on_whole_data()[spark_per_case['Исход дела'].isna()],
+          return_counts=True)
+pre_sel_df = logit_reg_pre_sel_rul.create_pred_df(ruling_texts=spark_per_case['pre_sel_ruling_text'])
+pre_sel_df.to_csv('classifying_decisions_logit_preds/pre_selection_preds.csv', index=True, encoding='utf-8')
+pre_sel_df.to_excel('classifying_decisions_logit_preds/pre_selection_preds.xlsx', encoding='utf-8')
+
+y_pred_pre_sel = logit_reg_pre_sel_rul.get_preds_on_whole_data()
+# for no. 69 and 70 and 47 correct label should be 0
+y_pred_pre_sel[spark_per_case.index == 69]
+y_pred_pre_sel[spark_per_case.index == 70]
+y_pred_pre_sel[spark_per_case.index == 47]
+
+# for cases no. 15 and 19 correct label is 1
+y_pred_pre_sel[spark_per_case.index == 15]
+y_pred_pre_sel[spark_per_case.index == 19]
+
+
+
+logit_reg_all_rul = LogitReg(stemmed_tokens_all_rulings)
+logit_reg_all_rul.fit_on_train_set(test_set_prop=0.15)
+logit_reg_all_rul.get_clas_report()
+logit_reg_all_rul.fit_on_whole_data()
+np.unique(logit_reg_all_rul.get_preds_on_whole_data()[spark_per_case['Исход дела'].isna()],
+          return_counts=True)
+all_rulings_df = logit_reg_all_rul.create_pred_df(ruling_texts=spark_per_case['all_rulings_text'])
+all_rulings_df.to_csv('classifying_decisions_logit_preds/all_rulings_preds.csv', index=True, encoding='utf-8')
+all_rulings_df.to_excel('classifying_decisions_logit_preds/all_rulings_preds.xlsx', encoding='utf-8')
+
+y_pred_all = logit_reg_all_rul.get_preds_on_whole_data()
+# for no. 69 and 70 and 47 correct label should be 0
+y_pred_all[spark_per_case.index == 69]
+y_pred_all[spark_per_case.index == 70]
+y_pred_all[spark_per_case.index == 47]
+
+# for cases no. 15 and 19 correct label is 1
+y_pred_all[spark_per_case.index == 15]
+y_pred_all[spark_per_case.index == 19]
+
+
+
+
 
 y_pred = logistic_reg.predict(features)
 y_pred_prob = logistic_reg.predict_proba(features)[:, 1] # probability of y == 1
