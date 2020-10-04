@@ -24,8 +24,6 @@ spark_per_case = spark_per_case.applymap(lambda list_in_cell: [x for x in list_i
 
 
 spark_per_case.shape
-spark_per_case['Исход дела'].isna().sum()
-spark_per_case['Категория'].isna().sum()
 
 spark_per_case.apply(lambda x: x.isna().sum())
 
@@ -79,8 +77,16 @@ spark_per_case[['Номер дела', 'Категория', 'Исход дел�
 spark_per_ruling = spark_per_case.explode('Резолютивная часть').reset_index()
 spark_per_ruling.shape
 
-#arbitrage_rulings_df['ruling_date'] = pd.to_datetime(arbitrage_rulings_df['ruling_date'], format='%Y%m%d')
+spark_per_ruling['ruling_day'] = spark_per_ruling['Резолютивная часть'].str.extract('^(\d\d) *\. *\d\d *\. *\d{4}')
+spark_per_ruling['ruling_month'] = spark_per_ruling['Резолютивная часть'].str.extract('^\d\d *\. *(\d\d) *\. *\d{4}')
+spark_per_ruling['ruling_year'] = spark_per_ruling['Резолютивная часть'].str.extract('^\d\d *\. *\d\d *\. *(\d{4})')
+spark_per_ruling['ruling_date'] = pd.to_datetime(dict(year=spark_per_ruling['ruling_year'],
+                                                      month=spark_per_ruling['ruling_month'],
+                                                      day=spark_per_ruling['ruling_day']))
+spark_per_ruling.columns
 
+spark_per_case['date_of_last_ruling'] = spark_per_ruling.groupby('№').first()['ruling_date']
+spark_per_case['date_of_first_ruling'] = spark_per_ruling.groupby('№').last()['ruling_date']
 
 spark_per_case.shape
 spark_per_case['Состояние'].value_counts()
@@ -115,8 +121,8 @@ stemmed_tokens_pre_sel_ruling = tokenize_and_stem(spark_per_case['pre_sel_ruling
 stemmed_tokens_last_ruling = tokenize_and_stem(spark_per_case['the_last_ruling_text'].tolist())
 stemmed_tokens_all_rulings = tokenize_and_stem(spark_per_case['all_rulings_text'].tolist())
 
- y = (spark_per_case['Исход дела'][~not_labeled_obs_mask] == 'Иск не удовлетворен') * 1
 not_labeled_obs_mask = spark_per_case['Исход дела'].isna()
+y = (spark_per_case['Исход дела'][~not_labeled_obs_mask] == 'Иск не удовлетворен') * 1
 
 
 #tokens_of_all_cases = [type(x) for x in spark_per_ruling['Резолютивная часть'].tolist()]
@@ -166,7 +172,9 @@ class LogitReg:
     def get_proba_on_whole_data(self):
         return self.log_reg_model.predict_proba(self.features)
 
-    def create_pred_df(self, ruling_texts=spark_per_case['the_last_ruling_text']):
+    def create_pred_df(self, ruling_texts=spark_per_case['the_last_ruling_text'],
+                       last_ruling_date=spark_per_case['date_of_last_ruling'],
+                       first_ruling_date=spark_per_case['date_of_first_ruling']):
         labeled_obs = (~self.not_labeled_obs_mask) * 1
 
         dict_data = {'last_ruling_text': ruling_texts,
@@ -174,13 +182,11 @@ class LogitReg:
                     'labeled': labeled_obs,
                     'claim_not_sat_dummy': (self.rulings_labels == 'Иск не удовлетворен') * 1,
                     'claim_not_sat_pred': self.log_reg_model.predict(self.features),
-                    'claim_not_sat_pred_prob': self.log_reg_model.predict_proba(self.features)[:, 1]}
+                    'claim_not_sat_pred_prob': self.log_reg_model.predict_proba(self.features)[:, 1],
+                    'last_ruling_date': last_ruling_date,
+                    'first_ruling_date': first_ruling_date}
 
         return pd.DataFrame(dict_data)
-
-
-
-
 
 
 
@@ -188,8 +194,6 @@ class LogitReg:
 logit_reg_last_rul = LogitReg(stemmed_tokens_last_ruling)
 logit_reg_last_rul.fit_on_train_set(test_set_prop=0.15)
 logit_reg_last_rul.get_clas_report()
-
-
 
 logit_reg_pre_sel_rul = LogitReg(stemmed_tokens_pre_sel_ruling)
 logit_reg_pre_sel_rul.fit_on_train_set(test_set_prop=0.15)
@@ -251,23 +255,6 @@ y_pred[spark_per_case.index == 47]
 # for cases no. 15 and 19 correct label is 1
 y_pred[spark_per_case.index == 15]
 y_pred[spark_per_case.index == 19]
-
-
-labeled_obs = (~not_labeled_obs_mask) * 1
-
-dict_data = {'last_ruling_text': spark_per_case['the_last_ruling_text'],
- 'resolution_label': spark_per_case['Исход дела'],
- 'labeled': labeled_obs,
- 'claim_not_sat_dummy': (spark_per_case['Исход дела'] == 'Иск не удовлетворен') * 1,
- 'claim_not_sat_pred': y_pred, 'claim_not_sat_pred_prob': y_pred_prob}
-spark_per_case['Исход дела'].array
-
-len(y_pred_prob)
-(spark_per_case['Исход дела'] == 'Иск не удовлетворен').shape
-pd.DataFrame(dict_data).to_csv('case_decisions_logit_preds.csv', index=True, encoding='utf-8')
-pd.DataFrame(dict_data).to_excel('case_decisions_logit_preds.xlsx', encoding='utf-8' )
-
-
 
 
 
