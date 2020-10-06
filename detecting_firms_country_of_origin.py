@@ -61,6 +61,68 @@ print(bool(re.search('\sсуд\s', 'Экономический  Гомельск
 only_firms_list = [x for x in all_firms_list if not bool(re.search('\sсуд\s', x, flags=re.IGNORECASE))]
 len(only_firms_list)
 
+only_firms_list
+
+!pip install google
+from googlesearch import search
+
+query = "Карпатски Петролеум Корпорейшн"
+for i in search(query,  lang='en', safe='off', num=10, start=0, stop=10, pause=2.0, country='', extra_params=None, user_agent=None):
+    print(i)
+
+[x for x in search(query,  lang='en', safe='off', num=10, start=0, stop=10, pause=2.0, country='', extra_params=None, user_agent=None)]
+
+queries_list = only_firms_list
+only_firms_list
+search_results_list = []
+for query in queries_list:
+    one_firm_results_list = []
+    for link in search(query,  lang='en', safe='off', num=8, start=0, stop=10,
+                       pause=2.0, country='', extra_params=None, user_agent=None):
+        one_firm_results_list.append(link)
+
+    search_results_list.append(one_firm_results_list)
+
+
+import pickle
+pickle.dump(search_results_list, open( "auxiliary_files/search_results_list.p", "wb" ) )
+
+search_results_list = pickle.load( open( "auxiliary_files/search_results_list.p", "rb" ) )
+search_results_list
+
+queries_list
+
+# regex pattern to match the top level domain of the URL
+tld_pattern = '(?:[-a-zA-Z0-9@:%_\+~.#=]{2,256}\.)?[-a-zA-Z0-9@:%_\+~#=]*\.([a-z]{2,3}\b)(?:[-a-zA-Z0-9@:%_\+.~#?&\/\/=]*)'
+tld_pattern = '(?:[-a-zA-Z0-9@:%_\+~.#=]{2,256}\.)?[-a-zA-Z0-9@:%_\+~#=]*\.([a-z]{2,3}\b)(?:[-a-zA-Z0-9@:%_\+.~#?&\/\/=]*)'
+
+import tldextract
+tldextract.extract(search_results_list[0][1])
+
+
+tdl_list = [[tldextract.extract(link).suffix for link in search_results] for search_results in search_results_list]
+site_list = [[tldextract.extract(link).domain for link in search_results] for search_results in search_results_list]
+
+'sudact'
+'garant'
+'garant' in ['sudact', 'garant', 'consultant']
+
+irrelev_sites = ['sudact', 'garant', 'consultant']
+
+tdl_list = [[domain for j, domain in enumerate(domain_list) if not site_list[i][j] in irrelev_sites] for i, domain_list in enumerate(tdl_list)]
+
+# We want to choose only the last domin (i.e. only 'kz' in 'gov.kz')
+tdl_list = [[domain.split(sep='.')[-1] for domain in domain_list] for domain_list in tdl_list]
+
+from collections import Counter
+
+tdl_list_counts = [Counter(domain_list) for domain_list in tdl_list]
+
+#matched_pat = re.search(tld_pattern, search_results_list[0][0], flags=re.IGNORECASE)
+#print(matched_pat)
+
+tdl_list_ru_counts = [counter_obj['ru'] for counter_obj in tdl_list_counts]
+tdl_list_ua_counts = [counter_obj['ua'] for counter_obj in tdl_list_counts]
 
 
 
