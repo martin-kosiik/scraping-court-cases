@@ -56,14 +56,11 @@ all_firms_list
 
 # We want to drop any names that contain phrase "суд" since they are not firms
 
-print(bool(re.search('\sсуд\s', 'Экономический  Гомельской области', flags=re.IGNORECASE)))
-
 only_firms_list = [x for x in all_firms_list if not bool(re.search('\sсуд\s', x, flags=re.IGNORECASE))]
 len(only_firms_list)
 
 only_firms_list
 
-!pip install google
 from googlesearch import search
 
 query = "Карпатски Петролеум Корпорейшн"
@@ -103,12 +100,9 @@ tldextract.extract(search_results_list[0][1])
 tdl_list = [[tldextract.extract(link).suffix for link in search_results] for search_results in search_results_list]
 site_list = [[tldextract.extract(link).domain for link in search_results] for search_results in search_results_list]
 
-'sudact'
-'garant'
-'garant' in ['sudact', 'garant', 'consultant']
-
+# remove 'irrelevant sites' - those contain a database of the ruling texts and
+# therefore are not informative about the country of origin of the firms
 irrelev_sites = ['sudact', 'garant', 'consultant']
-
 tdl_list = [[domain for j, domain in enumerate(domain_list) if not site_list[i][j] in irrelev_sites] for i, domain_list in enumerate(tdl_list)]
 
 # We want to choose only the last domin (i.e. only 'kz' in 'gov.kz')
@@ -121,9 +115,65 @@ tdl_list_counts = [Counter(domain_list) for domain_list in tdl_list]
 #matched_pat = re.search(tld_pattern, search_results_list[0][0], flags=re.IGNORECASE)
 #print(matched_pat)
 
+def add_counts(prev_count, choose_item='by', count_obj=tdl_list_counts[0]):
+    return prev_count + count_obj[choose_item]
+
+# We got some .su domains (Soviet Union) :-)
+from functools import reduce
+other_nation_domains = ['by', 'kz', 'ee', 'de', 'tr', 'it', 'lv', 'uk', 'cz',
+                        'sk', 'eu', 'kg', 'uz', 'bg', 'az', 'lu']
+internat_domains = ['com', 'org', 'info', 'biz', 'site', 'edu', 'gov', 'name']
+
+tdl_list_total_counts = [sum(counter_obj.values()) for counter_obj in tdl_list_counts]
 tdl_list_ru_counts = [counter_obj['ru'] for counter_obj in tdl_list_counts]
 tdl_list_ua_counts = [counter_obj['ua'] for counter_obj in tdl_list_counts]
+tdl_list_other_nat_counts = [reduce(lambda x,y: add_counts(x, y, count_obj=counter_obj), other_nation_domains, 0) for counter_obj in tdl_list_counts]
+tdl_list_internat_counts = [reduce(lambda x,y: add_counts(x, y, count_obj=counter_obj), internat_domains, 0) for counter_obj in tdl_list_counts]
 
+def prop(n, totals=10):
+    return n/totals
+
+
+def decision_rule(ru_counts, ua_counts, other_nat_counts, totals):
+    def prop(n, total=totals):
+        return n/total
+    if totals == 0:
+        output = 'no links'
+    elif prop(ua_counts) > 0.2 or ua_counts >= 2:
+        output = 'ukrainian'
+    elif prop(other_nat_counts) > 0.2 or other_nat_counts >= 2:
+         output = 'other country'
+    elif prop(ru_counts) > 0.7:
+        output = 'russian'
+    else:
+        output = 'missing'
+    return output
+
+n = 6
+decision_rule(tdl_list_ru_counts[n], tdl_list_ua_counts[n], tdl_list_other_nat_counts[n], tdl_list_total_counts[n])
+classified_firms = [decision_rule(tdl_list_ru_counts[n], tdl_list_ua_counts[n], tdl_list_other_nat_counts[n], tdl_list_total_counts[n]) for n in range(len(tdl_list_ru_counts))]
+
+Counter(classified_firms)
+
+
+
+def merge_lists(list_to_merge=spark_per_case['Истец link'], index_list=only_firms_list, fill_with=tdl_list_ua_counts):
+    outupt_list = []
+    for firms_for_case in list_to_merge:
+        firms_for_case_pred = []
+        for firm_name in firms_for_case:
+            if firm_name in only_firms_list:
+                firms_for_case_pred.append(fill_with[index_list.index(firm_name)])
+            elif firm_name == 1:
+                firms_for_case_pred.append('in spark database')
+            else:
+                firms_for_case_pred.append('court')
+        outupt_list.append(firms_for_case_pred)
+    return outupt_list
+
+
+merge_lists(spark_per_case['Ответчик link'])[:6]
+spark_per_case['Ответчик link'][:6]
 
 
 # Next try to apply Named entity recognition model to detect people and locations
