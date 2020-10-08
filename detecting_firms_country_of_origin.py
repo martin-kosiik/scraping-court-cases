@@ -74,7 +74,7 @@ only_firms_list
 search_results_list = []
 for query in queries_list:
     one_firm_results_list = []
-    for link in search(query,  lang='en', safe='off', num=8, start=0, stop=10,
+    for link in search(query,  lang='en', safe='off', num=10, start=0, stop=10,
                        pause=2.0, country='', extra_params=None, user_agent=None):
         one_firm_results_list.append(link)
 
@@ -143,7 +143,7 @@ def decision_rule(ru_counts, ua_counts, other_nat_counts, totals):
         output = 'ukrainian'
     elif prop(other_nat_counts) > 0.2 or other_nat_counts >= 2:
          output = 'other country'
-    elif prop(ru_counts) > 0.7:
+    elif prop(ru_counts) > 0.65:
         output = 'russian'
     else:
         output = 'missing'
@@ -155,6 +155,22 @@ classified_firms = [decision_rule(tdl_list_ru_counts[n], tdl_list_ua_counts[n], 
 
 Counter(classified_firms)
 
+classified_firms[15]
+search_results_list[5]
+
+
+only_firms_list[11]
+only_firms_list[150:155]
+
+
+links_df = pd.DataFrame({'firm_name_in_spark': only_firms_list ,'links': search_results_list,
+                          'total_valid_links': tdl_list_total_counts,
+                          'ru_domians': tdl_list_ru_counts,
+                          'ua_domains': tdl_list_ua_counts,
+                          'other_countries_domains': tdl_list_other_nat_counts,
+                          'international_domains': tdl_list_internat_counts})
+
+links_df.explode('links').to_excel('firm_links.xlsx')
 
 
 def merge_lists(list_to_merge=spark_per_case['Истец link'], index_list=only_firms_list, fill_with=tdl_list_ua_counts):
