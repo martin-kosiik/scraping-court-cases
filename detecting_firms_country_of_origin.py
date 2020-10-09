@@ -134,24 +134,49 @@ def prop(n, totals=10):
     return n/totals
 
 
-def decision_rule(ru_counts, ua_counts, other_nat_counts, totals):
-    def prop(n, total=totals):
+def decision_rule(tdl_counts, p_thesh=0.75):
+    internat_domains = ['com', 'org', 'info', 'biz', 'site', 'edu', 'gov', 'name']
+    other_nation_domains = ['by', 'kz', 'ee', 'de', 'tr', 'it', 'lv', 'uk', 'cz',
+                            'sk', 'eu', 'kg', 'uz', 'bg', 'az', 'lu']
+    internat_counts = reduce(lambda x,y: add_counts(x, y, count_obj=tdl_counts), internat_domains, 0)
+    other_nat_counts = reduce(lambda x,y: add_counts(x, y, count_obj=tdl_counts), other_nation_domains, 0)
+    #p_thesh = 0.75 # threshold for classifying
+    total_links = sum(tdl_counts.values())
+
+    def prop(n, total=total_links):
         return n/total
-    if totals == 0:
+
+    if total_links == 0:
         output = 'no links'
-    elif prop(ua_counts) > 0.2 or ua_counts >= 2:
+    elif prop(tdl_counts['ua']) > p_thesh and tdl_counts['ua'] >= 2:
         output = 'ukrainian'
-    elif prop(other_nat_counts) > 0.2 or other_nat_counts >= 2:
-         output = 'other country'
-    elif prop(ru_counts) > 0.65:
+    elif prop(tdl_counts['by']) > p_thesh and tdl_counts['by'] >= 2:
+        output = 'byelorussian'
+    elif prop(tdl_counts['kz']) > p_thesh and tdl_counts['kz'] >= 2:
+         output = 'kazakh'
+    elif prop(tdl_counts['kg']) > p_thesh and tdl_counts['kg'] >= 2:
+        output = 'kyrgyz'
+    elif prop(tdl_counts['uz']) > p_thesh and tdl_counts['uz'] >= 2:
+        output = 'uzbek'
+    elif prop(tdl_counts['az']) > p_thesh and tdl_counts['az'] >= 2:
+        output = 'azeri'
+    elif prop(tdl_counts['am']) > p_thesh and tdl_counts['am'] >= 2:
+        output = 'armenian'
+    elif prop(tdl_counts['ro']) > p_thesh and tdl_counts['ro'] >= 2:
+        output = 'romanain'
+    elif prop(tdl_counts['tj']) > p_thesh and tdl_counts['tj'] >= 2:
+        output = 'tajik'
+    elif prop(other_nat_counts) > p_thesh and other_nat_counts >= 2:
+        output = 'other (non-CIS) country'
+    elif prop(tdl_counts['ru']) > p_thesh and tdl_counts['ru'] >= 2:
         output = 'russian'
     else:
-        output = 'missing'
+        output = 'unclear/offshore'
     return output
 
 n = 6
 decision_rule(tdl_list_ru_counts[n], tdl_list_ua_counts[n], tdl_list_other_nat_counts[n], tdl_list_total_counts[n])
-classified_firms = [decision_rule(tdl_list_ru_counts[n], tdl_list_ua_counts[n], tdl_list_other_nat_counts[n], tdl_list_total_counts[n]) for n in range(len(tdl_list_ru_counts))]
+classified_firms = [decision_rule(tdl_count, p_thesh=0.60) for tdl_count in tdl_list_counts]
 
 Counter(classified_firms)
 
