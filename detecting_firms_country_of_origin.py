@@ -21,9 +21,11 @@ spark_per_case = spark_per_case.applymap(lambda list_in_cell: [x for x in list_i
 spark_per_case
 
 def flatten_lists(the_list):
-    if len(the_list) is 0:
+    if not isinstance(the_list, list):
+        out_list = the_list
+    elif len(the_list) == 0:
         out_list = np.nan
-    elif len(the_list) is 1:
+    elif len(the_list) == 1:
         out_list = the_list[0]
     else:
         out_list = the_list
@@ -147,7 +149,7 @@ def decision_rule(tdl_counts, p_thesh=0.75):
         return n/total
 
     if total_links == 0:
-        output = 'no links'
+        output = 'no_links'
     elif prop(tdl_counts['ua']) > p_thesh and tdl_counts['ua'] >= 2:
         output = 'ukrainian'
     elif prop(tdl_counts['by']) > p_thesh and tdl_counts['by'] >= 2:
@@ -167,25 +169,21 @@ def decision_rule(tdl_counts, p_thesh=0.75):
     elif prop(tdl_counts['tj']) > p_thesh and tdl_counts['tj'] >= 2:
         output = 'tajik'
     elif prop(other_nat_counts) > p_thesh and other_nat_counts >= 2:
-        output = 'other (non-CIS) country'
+        output = 'other_non_CIS'
     elif prop(tdl_counts['ru']) > p_thesh and tdl_counts['ru'] >= 2:
         output = 'russian'
     else:
-        output = 'unclear/offshore'
+        output = 'unclear_offshore'
     return output
 
-n = 6
-decision_rule(tdl_list_ru_counts[n], tdl_list_ua_counts[n], tdl_list_other_nat_counts[n], tdl_list_total_counts[n])
-classified_firms = [decision_rule(tdl_count, p_thesh=0.60) for tdl_count in tdl_list_counts]
+classified_firms = [decision_rule(tdl_count, p_thesh=0.55) for tdl_count in tdl_list_counts]
+cis_countries = ['kazakh', 'byelorussian', 'kyrgyz', 'uzbek', 'azeri', 'armenian',
+                 'romanain', 'tajik']
+classified_firms = ['CIS' if x in cis_countries else x for x in classified_firms]
 
-Counter(classified_firms)
-
-classified_firms[15]
-search_results_list[5]
+Counter(classified_firms).keys()
 
 
-only_firms_list[11]
-only_firms_list[150:155]
 
 
 links_df = pd.DataFrame({'firm_name_in_spark': only_firms_list ,'links': search_results_list,
@@ -198,7 +196,7 @@ links_df = pd.DataFrame({'firm_name_in_spark': only_firms_list ,'links': search_
 links_df.explode('links').to_excel('firm_links.xlsx')
 
 
-def merge_lists(list_to_merge=spark_per_case['Истец link'], index_list=only_firms_list, fill_with=tdl_list_ua_counts):
+def merge_lists(list_to_merge=spark_per_case['Истец link'], index_list=only_firms_list, fill_with=classified_firms):
     outupt_list = []
     for firms_for_case in list_to_merge:
         firms_for_case_pred = []
@@ -206,15 +204,59 @@ def merge_lists(list_to_merge=spark_per_case['Истец link'], index_list=only
             if firm_name in only_firms_list:
                 firms_for_case_pred.append(fill_with[index_list.index(firm_name)])
             elif firm_name == 1:
-                firms_for_case_pred.append('in spark database')
+                firms_for_case_pred.append('in_spark_database')
             else:
-                firms_for_case_pred.append('court')
+                firms_for_case_pred.append('court') # the name is a court not a firm
         outupt_list.append(firms_for_case_pred)
     return outupt_list
 
 
-merge_lists(spark_per_case['Ответчик link'])[:6]
-spark_per_case['Ответчик link'][:6]
+
+spark_per_case['defendant_country'] = merge_lists(spark_per_case['Ответчик link'])
+spark_per_case['plaintiff_country'] = merge_lists(spark_per_case['Истец link'])
+spark_per_case['third_party_country'] = merge_lists(spark_per_case['Третьи лица link'])
+
+country_categories = ['unclear_offshore', 'CIS', 'russian', 'ukrainian', 'no_links', 'other_non_CIS', 'in_spark_database']
+
+
+
+spark_per_case.columns
+
+spark_per_case['defendant_total'] =  spark_per_case['defendant_country'].apply(lambda x: sum(Counter(x).values()))
+spark_per_case['plaintiff_total'] =  spark_per_case['plaintiff_country'].apply(lambda x: sum(Counter(x).values()))
+spark_per_case['third_party_total'] =  spark_per_case['third_party_country'].apply(lambda x: sum(Counter(x).values()))
+
+
+for country_cat in country_categories:
+    spark_per_case['defendant_country_'+country_cat] = spark_per_case['defendant_country'].apply(lambda x: Counter(x)[country_cat])
+    spark_per_case['plaintiff_country_'+country_cat] = spark_per_case['plaintiff_country'].apply(lambda x: Counter(x)[country_cat])
+    spark_per_case['third_party_country_'+country_cat] = spark_per_case['third_party_country'].apply(lambda x: Counter(x)[country_cat])
+
+
+
+columns_to_drop = ['Номер дела', 'Мои списки', 'Категория', 'Истец', 'Ответчик',
+                   'Третьи лица', 'Состояние', 'Исход дела', 'Дата иска', 'Дата решения',
+                   'Сумма иска, RUB', 'Сумма по решению, RUB', 'Суд и судья',
+                   'Представитель, Любая роль', 'Суть иска', 'Резолютивная часть',
+                   'Истец link', 'Ответчик link', 'Третьи лица link']
+
+spark_per_case.drop(columns_to_drop, axis=1, inplace=True)
+
+
+def flatten_lists(the_list):
+    if not isinstance(the_list, list):
+        out_list = the_list
+    elif len(the_list) == 0:
+        out_list = np.nan
+    elif len(the_list) == 1:
+        out_list = the_list[0]
+    else:
+        out_list = ';'.join(the_list)
+    return out_list
+
+spark_per_case = spark_per_case.applymap(flatten_lists)
+spark_per_case.to_csv('firm_country_pred.csv', index=True)
+
 
 
 # Next try to apply Named entity recognition model to detect people and locations
