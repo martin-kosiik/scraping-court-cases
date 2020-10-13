@@ -10,15 +10,15 @@ working_directory = "C:/Users/marti/OneDrive/Plocha/RA_work/scraping_court_cases
 os.chdir(working_directory)
 
 spark_cases = pd.read_excel('spark_cases_export.xlsx', sheet_name='report', header=1, skiprows=2)
-
-
 spark_cases['№'] =spark_cases['№'].fillna(method='ffill').astype(int)
-
 spark_per_case = spark_cases.groupby('№').agg(list)
 
 # this removes nan from every list in the dataframe since nan is not equal to nan
 spark_per_case = spark_per_case.applymap(lambda list_in_cell: [x for x in list_in_cell if x == x])
-spark_per_case
+# Remove firms with 'суд' in their name
+spark_per_case['Истец link'] = spark_per_case['Истец link'].apply(lambda firms_in_list: [x for x in firms_in_list if not bool(re.search('\sсуд\s', str(x), flags=re.IGNORECASE))])
+spark_per_case['Ответчик link'] = spark_per_case['Ответчик link'].apply(lambda firms_in_list: [x for x in firms_in_list if not bool(re.search('\sсуд\s', str(x), flags=re.IGNORECASE))])
+
 
 def flatten_lists(the_list):
     if not isinstance(the_list, list):
@@ -34,7 +34,6 @@ def flatten_lists(the_list):
 spark_per_ruling = spark_per_case.explode('Резолютивная часть').reset_index()
 
 
-spark_per_case
 
 
 import itertools
@@ -45,6 +44,15 @@ third_party_firms = list(itertools.chain.from_iterable(spark_per_case['Трет�
 
 all_firms_list = plaintiff_firms + def_firms + third_party_firms
 len(all_firms_list)
+
+
+plaintiff_firms = list(itertools.chain.from_iterable(spark_per_case['Истец'].tolist()))
+def_firms = list(itertools.chain.from_iterable(spark_per_case['Ответчик'].tolist()))
+all_firms_list_to_export = plaintiff_firms + def_firms
+all_firms_list_to_export = [x for x in all_firms_list_to_export if x == x]
+all_firms_list_to_export = list(dict.fromkeys(all_firms_list_to_export))
+all_firms_list_to_export = [x for x in all_firms_list if not bool(re.search('\sсуд\s', x, flags=re.IGNORECASE))]
+pd.DataFrame(all_firms_list_to_export, columns=['firm_names']).to_excel('firm_list.xlsx', index=False, encoding='utf-8')
 
 # Remove nan and 1 (which denotes the firms that are in the Spark database and thus are Russian)
 all_firms_list = [x for x in all_firms_list if x == x and x != 1]
@@ -96,7 +104,6 @@ tld_pattern = '(?:[-a-zA-Z0-9@:%_\+~.#=]{2,256}\.)?[-a-zA-Z0-9@:%_\+~#=]*\.([a-z
 tld_pattern = '(?:[-a-zA-Z0-9@:%_\+~.#=]{2,256}\.)?[-a-zA-Z0-9@:%_\+~#=]*\.([a-z]{2,3}\b)(?:[-a-zA-Z0-9@:%_\+.~#?&\/\/=]*)'
 
 import tldextract
-tldextract.extract(search_results_list[0][1])
 
 
 tdl_list = [[tldextract.extract(link).suffix for link in search_results] for search_results in search_results_list]
@@ -122,8 +129,12 @@ def add_counts(prev_count, choose_item='by', count_obj=tdl_list_counts[0]):
 
 # We got some .su domains (Soviet Union) :-)
 from functools import reduce
-other_nation_domains = ['by', 'kz', 'ee', 'de', 'tr', 'it', 'lv', 'uk', 'cz',
-                        'sk', 'eu', 'kg', 'uz', 'bg', 'az', 'lu']
+other_nation_domains = [ 'de', 'tr', 'it', 'uk', 'cz',
+                        'sk', 'eu', 'bg', 'lu']
+
+baltic_domains = ['ee', 'lv', 'lt']
+other_cis_domains = ['kg', 'az', 'am', 'tj', 'uz', 'ro']
+
 internat_domains = ['com', 'org', 'info', 'biz', 'site', 'edu', 'gov', 'name']
 
 tdl_list_total_counts = [sum(counter_obj.values()) for counter_obj in tdl_list_counts]
@@ -131,6 +142,8 @@ tdl_list_ru_counts = [counter_obj['ru'] for counter_obj in tdl_list_counts]
 tdl_list_ua_counts = [counter_obj['ua'] for counter_obj in tdl_list_counts]
 tdl_list_other_nat_counts = [reduce(lambda x,y: add_counts(x, y, count_obj=counter_obj), other_nation_domains, 0) for counter_obj in tdl_list_counts]
 tdl_list_internat_counts = [reduce(lambda x,y: add_counts(x, y, count_obj=counter_obj), internat_domains, 0) for counter_obj in tdl_list_counts]
+tdl_list_baltic_counts = [reduce(lambda x,y: add_counts(x, y, count_obj=counter_obj), baltic_domains, 0) for counter_obj in tdl_list_counts]
+
 
 def prop(n, totals=10):
     return n/totals
@@ -196,41 +209,53 @@ links_df = pd.DataFrame({'firm_name_in_spark': only_firms_list ,'links': search_
 links_df.explode('links').to_excel('firm_links.xlsx')
 
 
-def merge_lists(list_to_merge=spark_per_case['Истец link'], index_list=only_firms_list, fill_with=classified_firms):
+def merge_lists(list_to_merge=spark_per_case['Истец link'], index_list=only_firms_list,
+                fill_with=classified_firms, skip_spark=True):
     outupt_list = []
     for firms_for_case in list_to_merge:
         firms_for_case_pred = []
         for firm_name in firms_for_case:
             if firm_name in only_firms_list:
                 firms_for_case_pred.append(fill_with[index_list.index(firm_name)])
-            elif firm_name == 1:
+            elif firm_name == 1 and not skip_spark:
                 firms_for_case_pred.append('in_spark_database')
+            elif firm_name == 1 and skip_spark:
+                pass
             else:
-                firms_for_case_pred.append('court') # the name is a court not a firm
+                firms_for_case_pred.append('court/missing') # the name is a court not a firm
         outupt_list.append(firms_for_case_pred)
     return outupt_list
 
 
 
-spark_per_case['defendant_country'] = merge_lists(spark_per_case['Ответчик link'])
-spark_per_case['plaintiff_country'] = merge_lists(spark_per_case['Истец link'])
-spark_per_case['third_party_country'] = merge_lists(spark_per_case['Третьи лица link'])
+#spark_per_case['defendant_tdl_counts'] = merge_lists(spark_per_case['Ответчик link'], fill_with=tdl_list_counts)
 
-country_categories = ['unclear_offshore', 'CIS', 'russian', 'ukrainian', 'no_links', 'other_non_CIS', 'in_spark_database']
+def make_count_series(series_to_merge=spark_per_case['Ответчик link'],
+                      fill_with=tdl_list_total_counts):
+    output = merge_lists(series_to_merge, fill_with=fill_with)
+    output = pd.Series(output).apply(np.sum).astype(int)
+    return output
+
+make_count_series(d)
+spark_per_case['defendant_domain_total'] = make_count_series(spark_per_case['Ответчик link'], tdl_list_total_counts)
+spark_per_case['plaintiff_domain_total'] = make_count_series(spark_per_case['Истец link'], tdl_list_total_counts)
+
+spark_per_case['defendant_ru'] = make_count_series(spark_per_case['Ответчик link'], tdl_list_ru_counts)
+spark_per_case['plaintiff_ru'] = make_count_series(spark_per_case['Истец link'], tdl_list_ru_counts)
+spark_per_case['defendant_ua'] = make_count_series(spark_per_case['Ответчик link'], tdl_list_ua_counts)
+spark_per_case['plaintiff_ua'] = make_count_series(spark_per_case['Истец link'], tdl_list_ua_counts)
+spark_per_case['defendant_baltic'] = make_count_series(spark_per_case['Ответчик link'], tdl_list_baltic_counts)
+spark_per_case['plaintiff_baltic'] = make_count_series(spark_per_case['Истец link'], tdl_list_baltic_counts)
 
 
 
-spark_per_case.columns
-
-spark_per_case['defendant_total'] =  spark_per_case['defendant_country'].apply(lambda x: sum(Counter(x).values()))
-spark_per_case['plaintiff_total'] =  spark_per_case['plaintiff_country'].apply(lambda x: sum(Counter(x).values()))
-spark_per_case['third_party_total'] =  spark_per_case['third_party_country'].apply(lambda x: sum(Counter(x).values()))
 
 
-for country_cat in country_categories:
-    spark_per_case['defendant_country_'+country_cat] = spark_per_case['defendant_country'].apply(lambda x: Counter(x)[country_cat])
-    spark_per_case['plaintiff_country_'+country_cat] = spark_per_case['plaintiff_country'].apply(lambda x: Counter(x)[country_cat])
-    spark_per_case['third_party_country_'+country_cat] = spark_per_case['third_party_country'].apply(lambda x: Counter(x)[country_cat])
+spark_per_case['number_of_defendants'] = spark_per_case['Ответчик link'].apply(len)
+spark_per_case['number_of_plaintiffs'] = spark_per_case['Истец link'].apply(len)
+
+spark_per_case['defend_in_spark'] = spark_per_case['Ответчик link'].apply(lambda x: Counter(x)[1])
+spark_per_case['plaint_in_spark'] = spark_per_case['Истец link'].apply(lambda x: Counter(x)[1])
 
 
 
