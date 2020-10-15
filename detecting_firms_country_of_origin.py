@@ -80,7 +80,6 @@ for i in search(query,  lang='en', safe='off', num=10, start=0, stop=10, pause=2
 [x for x in search(query,  lang='en', safe='off', num=10, start=0, stop=10, pause=2.0, country='', extra_params=None, user_agent=None)]
 
 queries_list = only_firms_list
-only_firms_list
 search_results_list = []
 for query in queries_list:
     one_firm_results_list = []
@@ -135,14 +134,26 @@ other_nation_domains = [ 'de', 'tr', 'it', 'uk', 'cz',
 baltic_domains = ['ee', 'lv', 'lt']
 other_cis_domains = ['kg', 'az', 'am', 'tj', 'uz', 'ro']
 
-internat_domains = ['com', 'org', 'info', 'biz', 'site', 'edu', 'gov', 'name']
+european_domains = pd.read_excel('domain_lists/european_domains.xlsx')['Domains'].str.replace('.', '').tolist()
+list_of_selected_domains = baltic_domains + ['ru', 'ua', 'kz', 'by'] + other_cis_domains
+european_domains = [x for x in european_domains if x not in list_of_selected_domains]
+
+rest_of_world_domains = pd.read_csv('domain_lists/countries_tld.csv')['Name[7]'].str.replace('.', '').tolist()
+list_of_selected_domains = baltic_domains + ['ru', 'ua', 'kz', 'by'] + other_cis_domains + european_domains
+rest_of_world_domains = [x for x in rest_of_world_domains if x not in list_of_selected_domains]
+
+internat_domains = ['com', 'org', 'info', 'biz', 'site', 'edu', 'gov', 'name', 'net', 'co']
 
 tdl_list_total_counts = [sum(counter_obj.values()) for counter_obj in tdl_list_counts]
-tdl_list_ru_counts = [counter_obj['ru'] for counter_obj in tdl_list_counts]
+tdl_list_ru_counts = [counter_obj['ru'] + counter_obj['рф'] for counter_obj in tdl_list_counts]
 tdl_list_ua_counts = [counter_obj['ua'] for counter_obj in tdl_list_counts]
-tdl_list_other_nat_counts = [reduce(lambda x,y: add_counts(x, y, count_obj=counter_obj), other_nation_domains, 0) for counter_obj in tdl_list_counts]
+tdl_list_kz_counts = [counter_obj['kz'] for counter_obj in tdl_list_counts]
+tdl_list_by_counts = [counter_obj['by'] for counter_obj in tdl_list_counts]
+tdl_list_european_counts = [reduce(lambda x,y: add_counts(x, y, count_obj=counter_obj), european_domains, 0) for counter_obj in tdl_list_counts]
+tdl_list_rest_of_world_countries_counts = [reduce(lambda x,y: add_counts(x, y, count_obj=counter_obj), rest_of_world_domains, 0) for counter_obj in tdl_list_counts]
 tdl_list_internat_counts = [reduce(lambda x,y: add_counts(x, y, count_obj=counter_obj), internat_domains, 0) for counter_obj in tdl_list_counts]
 tdl_list_baltic_counts = [reduce(lambda x,y: add_counts(x, y, count_obj=counter_obj), baltic_domains, 0) for counter_obj in tdl_list_counts]
+tdl_list_other_cis_counts = [reduce(lambda x,y: add_counts(x, y, count_obj=counter_obj), other_cis_domains, 0) for counter_obj in tdl_list_counts]
 
 
 def prop(n, totals=10):
@@ -233,10 +244,10 @@ def merge_lists(list_to_merge=spark_per_case['Истец link'], index_list=only
 def make_count_series(series_to_merge=spark_per_case['Ответчик link'],
                       fill_with=tdl_list_total_counts):
     output = merge_lists(series_to_merge, fill_with=fill_with)
-    output = pd.Series(output).apply(np.sum).astype(int)
+    output = pd.Series(output, index=series_to_merge.index).apply(np.sum).astype(int)
     return output
 
-make_count_series(d)
+
 spark_per_case['defendant_domain_total'] = make_count_series(spark_per_case['Ответчик link'], tdl_list_total_counts)
 spark_per_case['plaintiff_domain_total'] = make_count_series(spark_per_case['Истец link'], tdl_list_total_counts)
 
@@ -244,11 +255,16 @@ spark_per_case['defendant_ru'] = make_count_series(spark_per_case['Ответч�
 spark_per_case['plaintiff_ru'] = make_count_series(spark_per_case['Истец link'], tdl_list_ru_counts)
 spark_per_case['defendant_ua'] = make_count_series(spark_per_case['Ответчик link'], tdl_list_ua_counts)
 spark_per_case['plaintiff_ua'] = make_count_series(spark_per_case['Истец link'], tdl_list_ua_counts)
+spark_per_case['defendant_by'] = make_count_series(spark_per_case['Ответчик link'], tdl_list_by_counts)
+spark_per_case['plaintiff_by'] = make_count_series(spark_per_case['Истец link'], tdl_list_by_counts)
+spark_per_case['defendant_kz'] = make_count_series(spark_per_case['Ответчик link'], tdl_list_kz_counts)
+spark_per_case['plaintiff_kz'] = make_count_series(spark_per_case['Истец link'], tdl_list_kz_counts)
 spark_per_case['defendant_baltic'] = make_count_series(spark_per_case['Ответчик link'], tdl_list_baltic_counts)
 spark_per_case['plaintiff_baltic'] = make_count_series(spark_per_case['Истец link'], tdl_list_baltic_counts)
-
-
-
+spark_per_case['defendant_rest_of_europe'] = make_count_series(spark_per_case['Ответчик link'], tdl_list_european_counts)
+spark_per_case['plaintiff_rest_of_europe'] = make_count_series(spark_per_case['Истец link'], tdl_list_european_counts)
+spark_per_case['defendant_international'] = make_count_series(spark_per_case['Ответчик link'], tdl_list_internat_counts)
+spark_per_case['plaintiff_international'] = make_count_series(spark_per_case['Истец link'], tdl_list_internat_counts)
 
 
 spark_per_case['number_of_defendants'] = spark_per_case['Ответчик link'].apply(len)
@@ -257,6 +273,18 @@ spark_per_case['number_of_plaintiffs'] = spark_per_case['Истец link'].apply
 spark_per_case['defend_in_spark'] = spark_per_case['Ответчик link'].apply(lambda x: Counter(x)[1])
 spark_per_case['plaint_in_spark'] = spark_per_case['Истец link'].apply(lambda x: Counter(x)[1])
 
+decision_preds_pre_sel.columns
+decision_preds_pre_sel = pd.read_csv('classifying_decisions_logit_preds\pre_selection_preds.csv', index_col='№')
+decision_preds_pre_sel = decision_preds_pre_sel.rename({"claim_not_sat_pred": "claim_not_sat_pred_pre_sel",
+                                                        "claim_not_sat_pred_prob": "claim_not_sat_pred_prob_pre_sel"}, axis=1)
+
+decision_preds_all = pd.read_csv('classifying_decisions_logit_preds/all_rulings_preds.csv', index_col='№')
+decision_preds_all = decision_preds_all.drop(['last_ruling_text', 'resolution_label', 'labeled',
+                                              'claim_not_sat_dummy', 'last_ruling_date', 'first_ruling_date'], axis=1)
+decision_preds_all = decision_preds_all.rename({"claim_not_sat_pred": "claim_not_sat_pred_all_rul",
+                                                "claim_not_sat_pred_prob": "claim_not_sat_pred_prob_all_rul"}, axis=1)
+
+both_decision_preds = pd.concat([decision_preds_pre_sel, decision_preds_all], axis=1)
 
 
 columns_to_drop = ['Номер дела', 'Мои списки', 'Категория', 'Истец', 'Ответчик',
@@ -279,8 +307,19 @@ def flatten_lists(the_list):
         out_list = ';'.join(the_list)
     return out_list
 
-spark_per_case = spark_per_case.applymap(flatten_lists)
-spark_per_case.to_csv('firm_country_pred.csv', index=True)
+#spark_per_case = spark_per_case.applymap(flatten_lists)
+
+
+
+spark_per_case = spark_per_case.join(both_decision_preds)
+
+spark_per_case.last_ruling_text.isna().sum()
+
+cols_to_int = ['labeled', 'claim_not_sat_dummy', 'claim_not_sat_pred_pre_sel',
+               'claim_not_sat_pred_all_rul']
+spark_per_case.labeled.astype(pd.Int32Dtype())
+spark_per_case[cols_to_int] = spark_per_case[cols_to_int].apply(lambda x: x.astype(pd.Int32Dtype()))
+spark_per_case.to_csv('firm_country_pred_v2.csv', index=True)
 
 
 
