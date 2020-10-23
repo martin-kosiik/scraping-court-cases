@@ -124,7 +124,8 @@ stemmed_tokens_all_rulings = tokenize_and_stem(spark_per_case['all_rulings_text'
 not_labeled_obs_mask = spark_per_case['Исход дела'].isna()
 y = (spark_per_case['Исход дела'][~not_labeled_obs_mask] == 'Иск не удовлетворен') * 1
 
-
+spark_per_case['the_last_ruling_text'].index.tolist().index(659)
+spark_per_case.loc[659]
 #tokens_of_all_cases = [type(x) for x in spark_per_ruling['Резолютивная часть'].tolist()]
 #tokens_of_all_cases = [x for x in spark_per_ruling['Резолютивная часть'].tolist() if type(x) is float]
 
@@ -144,9 +145,9 @@ class LogitReg:
         self.y = (self.rulings_labels[~self.not_labeled_obs_mask] == 'Иск не удовлетворен') * 1
         def identity_tokenizer(text):
             return text
-        tfidf = TfidfVectorizer(tokenizer=identity_tokenizer, stop_words=None, lowercase=False, min_df=5, max_df=0.9,
-                                ngram_range=(1, 3))
-        self.features = tfidf.fit_transform(self.stemmed_tokens).toarray()
+        self.tfidf = TfidfVectorizer(tokenizer=identity_tokenizer, stop_words=None, lowercase=False, min_df=5, max_df=0.9,
+                                        ngram_range=(1, 3))
+        self.features = self.tfidf.fit_transform(self.stemmed_tokens).toarray()
 
     def fit_on_train_set(self, test_set_prop=0.1):
         X_labeled = self.features[~self.not_labeled_obs_mask]
@@ -188,6 +189,31 @@ class LogitReg:
 
         return pd.DataFrame(dict_data)
 
+    def plot_coefs(self, mean_contr=0):
+        if mean_contr == 1:
+            std_coefs = np.mean(self.features, 0) *self.log_reg_model.coef_[0]
+            axis_label = 'Mean contribution'
+        else:
+            std_coefs = self.log_reg_model.coef_[0]
+            axis_label = 'Coefficients'
+
+        non_zero_coefs = std_coefs[std_coefs != 0]
+        non_zero_features = np.array(self.tfidf.get_feature_names())[(std_coefs!= 0)]
+
+        non_zero_features = non_zero_features[np.argsort(non_zero_coefs)]
+        non_zero_coefs = np.sort(non_zero_coefs)
+
+        plt.rcdefaults()
+        fig, ax = plt.subplots(figsize=[7,9.5])
+
+        ax.barh(np.arange(len(non_zero_coefs)), non_zero_coefs, align='center')
+        ax.set_yticks(np.arange(len(non_zero_coefs)) )
+        ax.set_yticklabels(non_zero_features, {'fontsize':8})
+        ax.invert_yaxis()  # labels read top-to-bottom
+        ax.set_xlabel(axis_label)
+        #plt.show()
+        return fig
+
 
 
 
@@ -204,6 +230,25 @@ np.unique(logit_reg_pre_sel_rul.get_preds_on_whole_data()[spark_per_case['Исх
 pre_sel_df = logit_reg_pre_sel_rul.create_pred_df(ruling_texts=spark_per_case['pre_sel_ruling_text'])
 pre_sel_df.to_csv('classifying_decisions_logit_preds/pre_selection_preds.csv', index=True, encoding='utf-8')
 pre_sel_df.to_excel('classifying_decisions_logit_preds/pre_selection_preds.xlsx', encoding='utf-8')
+
+logit_reg_pre_sel_rul.plot_coefs().savefig(r'classifying_decisions_logit_preds\pre_sel_alg_coefs_plot.pdf', bbox_inches = "tight")
+logit_reg_pre_sel_rul.plot_coefs(mean_contr=1).savefig(r'classifying_decisions_logit_preds\pre_sel_alg_mean_contr_plot.pdf', bbox_inches = "tight")
+
+
+case_659_text =  """
+25.09.2017 Апелляционную жалобу закрытого акционерного общества «Завод энергетического оборудования Энергопоток» на определение Арбитражного суда Нижегородской области от 25.08.2017 по делу № А43-24937/2017 возвратить. 2.Возвратить закрытому акционерному обществу «Завод энергетического оборудования Энергопоток» из федерального бюджета государственную пошлину в размере 3000 руб., уплаченную по платёжному поручению №2326 от 29.08.2017. 3.
+"""
+logit_reg_pre_sel_rul.features[633]
+logit_reg_pre_sel_rul.log_reg_model.predict(stemmed_tokens_pre_sel_ruling[633])
+indices = logit_reg_pre_sel_rul.tfidf.transform([stemmed_tokens_pre_sel_ruling[633]]).toarray()[0]
+#indices != 0
+#indices = np.argsort(logit_reg_pre_sel_rul.log_reg_model.coef_)
+feature_names = np.array(logit_reg_pre_sel_rul.tfidf.get_feature_names())[(indices!= 0)]
+
+non_zero_coefs_mask = logit_reg_pre_sel_rul.log_reg_model.coef_[0][(indices!= 0)] != 0
+feature_names[non_zero_coefs_mask]
+logit_reg_pre_sel_rul.log_reg_model.coef_[0][(indices!= 0)][non_zero_coefs_mask]
+
 
 y_pred_pre_sel = logit_reg_pre_sel_rul.get_preds_on_whole_data()
 # for no. 69 and 70 and 47 correct label should be 0
@@ -227,6 +272,12 @@ all_rulings_df = logit_reg_all_rul.create_pred_df(ruling_texts=spark_per_case['a
 all_rulings_df.to_csv('classifying_decisions_logit_preds/all_rulings_preds.csv', index=True, encoding='utf-8')
 all_rulings_df.to_excel('classifying_decisions_logit_preds/all_rulings_preds.xlsx', encoding='utf-8')
 
+
+logit_reg_all_rul.plot_coefs().savefig(r'classifying_decisions_logit_preds\all_rulings_coefs_plot.pdf', bbox_inches = "tight")
+logit_reg_all_rul.plot_coefs(mean_contr=1).savefig(r'classifying_decisions_logit_preds\all_rulings_mean_contr_plot.pdf', bbox_inches = "tight")
+
+
+
 y_pred_all = logit_reg_all_rul.get_preds_on_whole_data()
 # for no. 69 and 70 and 47 correct label should be 0
 y_pred_all[spark_per_case.index == 69]
@@ -236,7 +287,6 @@ y_pred_all[spark_per_case.index == 47]
 # for cases no. 15 and 19 correct label is 1
 y_pred_all[spark_per_case.index == 15]
 y_pred_all[spark_per_case.index == 19]
-
 
 
 
