@@ -24,7 +24,7 @@ dp_ner_pred = pickle.load(open( "deeppavlov/model_pred_tagging_list_all.obj", "r
 # note: the first dim. is observation, the second has original text at 0 and 
 # the predictions (labels) at 1, and the third is redundatn
 # and the forth is the order of the word within the text
-print(dp_ner_pred[0][1][0][40:60])
+print(dp_ner_pred[45][1][0][:])
 
 #%%
 pred_companies_first = []
@@ -51,7 +51,7 @@ for k in range(len(dp_ner_pred)):
         else:
             merged_orgs[j-1] = merged_orgs[j-1] + ' ' + org_list_words[i]
     
-    regex = re.compile(r'(^суд)| суд|NEWPAGE|^ООО$|^Банка*$|^КПП$|^БИК$|^ТПП$|^МКАС$|закон|ИНН|ОГРН|Торгово *-* *промышленной палате|^ООН$|Содружества Независимых Государств|^АПК$|Арбитраж|^Обществ(о|а|у)$|^Компании$|^Товариществ(о|а|у)$|^Президиум$|№', re.IGNORECASE)
+    regex = re.compile(r'(^суд)| суд|^ГАЗ$|^Торговая компания$|NEWPAGE|^ИП$|^ООО$|^Банка*$|^КПП$|^БИК$|^ТПП$|^МКАС$|закон|ИНН|ОГРН|Торгово *-* *промышленной палате|^ООН$|Содружества Независимых Государств|^АПК$|Арбитраж|^Обществ(о|а|у)$|^Компании$|^Товариществ(о|а|у)$|^Президиум$|№', re.IGNORECASE)
     
     #filtered = filter(lambda i: not regex.search(i), full)
     merged_orgs = [i for i in merged_orgs if not regex.search(i)]
@@ -85,7 +85,6 @@ arbitrage_rulings_df = pd.read_csv("arbitrage_rulings.csv", encoding="UTF-8")
 
 arbitrage_rulings_df["proc_text"] = arbitrage_rulings_df.text.str.replace("NEWPAGE \n\d", "",
                                                                        regex=True)
-text = 'Европейский союз добавил в санкционный список девять политических деятелей из самопровозглашенных республик Донбасса — Донецкой народной республики (ДНР) и Луганской народной республики (ЛНР) — в связи с прошедшими там выборами. Об этом говорится в документе, опубликованном в официальном журнале Евросоюза. В новом списке фигурирует Леонид Пасечник, который по итогам выборов стал главой ЛНР. Помимо него там присутствуют Владимир Бидевка и Денис Мирошниченко, председатели законодательных органов ДНР и ЛНР, а также Ольга Позднякова и Елена Кравченко, председатели ЦИК обеих республик. Выборы прошли в непризнанных республиках Донбасса 11 ноября. На них удержали лидерство действующие руководители и партии — Денис Пушилин и «Донецкая республика» в ДНР и Леонид Пасечник с движением «Мир Луганщине» в ЛНР.'
 text = 'Кассационную  жалобу  Федерального  казенного  учреждения «Объединенное стратегическое командование Южного военного Округа» от 04.09.2013 № 3/12651 по делу № А06-8060/2012 возвратить заявителю. '
 
 text = str(arbitrage_rulings_df.proc_text[1])
@@ -99,3 +98,38 @@ markup = ner(text)
 #%%
 one_span = markup.spans[0]
 print(pred_involved_companies[0][0])
+print(show_markup(markup.text, markup.spans))
+#%%
+countries_in_russian = pd.read_csv('countries_in_russian.csv', sep=';')
+
+# %%
+from pymystem3 import Mystem
+text = "Красивая мама красиво мыла раму"
+m = Mystem()
+lemmas = m.lemmatize(text)
+print(''.join(lemmas))
+
+#%%
+lemmas = m.lemmatize(arbitrage_rulings_df["proc_text"][0])
+
+#%%
+from nltk.stem.snowball import SnowballStemmer
+stemmer = SnowballStemmer("russian") 
+my_words = ['Василий', 'Геннадий', 'Виталий']
+
+l=[stemmer.stem(word) for word in my_words]
+#print(arbitrage_rulings_df["proc_text"][0])
+
+#%%
+from razdel import tokenize
+tokens = list(tokenize(arbitrage_rulings_df["proc_text"][0]))
+#print([_.text for _ in tokens])
+l=[stemmer.stem(word) for word in [_.text for _ in tokens]]
+#print(l)
+
+print(l == stemmer.stem(countries_in_russian.loc[0, 'short_name']))
+
+
+
+#%%
+print(pd.Series(pred_companies_first).dropna())
