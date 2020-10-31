@@ -33,6 +33,9 @@ def flatten_lists(the_list):
 
 spark_per_ruling = spark_per_case.explode('Резолютивная часть').reset_index()
 
+1447/2178
+spark_per_case.shape
+spark_per_case['Категория'].apply(flatten_lists).value_counts()
 
 
 
@@ -46,13 +49,38 @@ all_firms_list = plaintiff_firms + def_firms + third_party_firms
 len(all_firms_list)
 
 
-plaintiff_firms = list(itertools.chain.from_iterable(spark_per_case['Истец'].tolist()))
-def_firms = list(itertools.chain.from_iterable(spark_per_case['Ответчик'].tolist()))
-all_firms_list_to_export = plaintiff_firms + def_firms
+plaintiff_firms_w_spark = list(itertools.chain.from_iterable(spark_per_case['Истец'].tolist()))
+def_firms_w_spark = list(itertools.chain.from_iterable(spark_per_case['Ответчик'].tolist()))
+third_party_firms_w_spark = list(itertools.chain.from_iterable(spark_per_case['Третьи лица'].tolist()))
+
+from collections import Counter
+
+Counter([x in plaintiff_firms + def_firms for x in third_party_firms])
+1108 + 338
+
+all_firms_list_to_export = plaintiff_firms_w_spark + def_firms_w_spark
 all_firms_list_to_export = [x for x in all_firms_list_to_export if x == x]
 all_firms_list_to_export = list(dict.fromkeys(all_firms_list_to_export))
-all_firms_list_to_export = [x for x in all_firms_list if not bool(re.search('\sсуд\s', x, flags=re.IGNORECASE))]
+all_firms_list_to_export = [x for x in all_firms_list_to_export if not bool(re.search('\sсуд\s', x, flags=re.IGNORECASE))]
 pd.DataFrame(all_firms_list_to_export, columns=['firm_names']).to_excel('firm_list.xlsx', index=False, encoding='utf-8')
+
+filrm_list_v2 = pd.read_excel('firm_list_v2_vasily.xlsx')
+exported_firms = filrm_list_v2.firm_names.tolist()
+
+len(all_firms_list_to_export)
+all_firms_list = plaintiff_firms + def_firms
+spark_firms = [x for x in all_firms_list_to_export if x not in exported_firms]
+
+pd.DataFrame(spark_firms, columns=['firm_names']).to_excel('firm_list_spark.xlsx', index=False, encoding='utf-8')
+
+[x for x in exported_firms if x not in all_firms_list_to_export].__len__()
+
+set(exported_firms).intersection(set(all_firms_list_to_export)).__len__()
+
+len(exported_firms)
+
+all_firms_list_to_export.__len__()
+all_firms_list.__len__()
 
 # Remove nan and 1 (which denotes the firms that are in the Spark database and thus are Russian)
 all_firms_list = [x for x in all_firms_list if x == x and x != 1]
