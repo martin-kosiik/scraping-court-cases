@@ -14,7 +14,7 @@ ukr_regions = pd.read_excel('ukr_regions.xlsx')
 ukr_regions['region_clean'] = ukr_regions.region.str.lower().str.replace('область', '')
 
 
-!pip install pymystem3
+#!pip install pymystem3
 
 from pymystem3 import Mystem
 #text = "Красивая мама красиво мыла раму"
@@ -71,16 +71,30 @@ court_matches = list(itertools.chain(*court_matches))
 
 only_courts_list['ukr_court_matches'] = court_matches
 
+full_text_token_courts[4]
 
-kiev_matches = [bool(reg_match(court, ' киев', 0)) for court in full_text_token_courts]
+kiev_matches = [bool(reg_match(court, 'киев*(\s|\.)', 0)) for court in only_courts_list['entity']]
+sum(kiev_matches)
 
-only_courts_list.loc[kiev_matches,'ukr_court_matches']
+tpp_matches = [bool(reg_match(court, 'тпп украин', 1)) for court in full_text_token_courts]
+tpp_matches_full = [bool(reg_match(court, 'при Торгово-промышленной палате Украины', 6)) for court in only_courts_list['entity']]
 
-only_courts_list.loc[kiev_matches,]
+# при Торгово-промышленной палате Украины
+# тпп украин
+
+only_courts_list.loc[tpp_matches_full, 'entity']
+
+only_courts_list.loc[tpp_matches,]
+
+only_courts_list.loc[tpp_matches_full ,'ukr_court_matches'] = 'тпп Украины'
+only_courts_list.loc[tpp_matches ,'ukr_court_matches'] = 'тпп Украины'
+
 
 only_courts_list.to_excel('ukr_courts_list.xlsx')
 
 #https://ru.wikipedia.org/wiki/%D0%90%D0%B4%D0%BC%D0%B8%D0%BD%D0%B8%D1%81%D1%82%D1%80%D0%B0%D1%82%D0%B8%D0%B2%D0%BD%D0%BE%D0%B5_%D0%B4%D0%B5%D0%BB%D0%B5%D0%BD%D0%B8%D0%B5_%D0%A3%D0%BA%D1%80%D0%B0%D0%B8%D0%BD%D1%8B#2016[%D0%9A_18]
+
+# международн коммерческ арбитражн суд при тпп украин
 
 np.sum(kiev_matches)
 any_match.__len__()
