@@ -90,7 +90,7 @@ only_foreign_arb = spark_per_case['Категория'] == 'Признание �
 spark_per_case = spark_per_case[only_foreign_arb].copy()
 
 
-final_preds = pd.read_csv(r'classifying_decisions_logit_preds\final_preds.csv', index_col='№')
+final_preds = pd.read_csv(r'classifying_decisions_logit_preds\final_preds_2.csv', index_col='№')
 
 cols_to_drop = ['Мои списки', 'Категория', 'Истец', 'Ответчик', 'Суд и судья',
                 'Третьи лица', 'Состояние', 'Суть иска',
@@ -116,8 +116,8 @@ spark_per_case['not_sat_labeled'] = decisions_1
 spark_per_case['not_sat_pred_pre_sel'] = spark_per_case['not_sat_pred_pre_sel'].astype('Int64')
 spark_per_case['not_sat_pred_all_rul'] = spark_per_case['not_sat_pred_all_rul'].astype('Int64')
 
-spark_per_case.to_csv('classifying_decisions_logit_preds/final_dataset.csv', index=True, encoding='utf-8')
-spark_per_case.to_excel('classifying_decisions_logit_preds/final_dataset.xlsx', index=True, encoding='utf-8')
+spark_per_case.to_csv('classifying_decisions_logit_preds/final_dataset_2.csv', index=True, encoding='utf-8')
+spark_per_case.to_excel('classifying_decisions_logit_preds/final_dataset_2.xlsx', index=True, encoding='utf-8')
 
 
 
