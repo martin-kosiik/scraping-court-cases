@@ -3,6 +3,8 @@ import re
 import pandas as pd
 import numpy as np
 import pickle
+import regex
+import itertools
 
 
 working_directory = "C:/Users/marti/OneDrive/Plocha/RA_work/scraping_court_cases"
@@ -50,7 +52,6 @@ def make_tokens(list_of_texts):
 
 tokenized_courts = tokenize_and_stem(only_courts_list['entity'])
 tokenized_ukr_regions = tokenize_and_stem(ukr_regions['region_clean'])
-import itertools
 tokenized_ukr_regions_flat = list(itertools.chain(*tokenized_ukr_regions))
 
 
@@ -60,8 +61,6 @@ for court in make_tokens(only_courts_list['entity']):
     full_text_token_courts.append(" ".join(court))
 
 
-
-import regex
 
 def reg_match(string, to_match, errs = 1):
     return (regex.search('\s(' + to_match +  '){e<=' + str(errs) + '}', string) is not None) *1
@@ -132,8 +131,11 @@ only_courts_list.to_excel('ukr_courts_list_2.xlsx')
 
 
 final_dataset = pd.read_csv('final_dataset_2.csv')
-
 courts_list = pd.read_excel('courts_list.xlsx')
+corrected_courts_list = pd.read_excel('courts_list_manual_VK_OK_final.xlsx')
+
+assert (courts_list['case_id'] == corrected_courts_list['case_id']).all()
+
 import ast
 courts_list.courts_list.apply(ast.literal_eval)
 courts_list['courts_in_text'] = courts_list.courts_list.apply(ast.literal_eval)
@@ -160,6 +162,17 @@ assert all(courts_list.loc[tpp_matches_full | tpp_matches, 'ukr_court_matches'].
 
 courts_list.loc[tpp_matches_full | tpp_matches, 'ukr_court_matches'] = 'тпп Украины'
 
+courts_list['plaintiff_country_1'] = corrected_courts_list['plaintiff_country_1']
+courts_list['plaintiff_country_2'] = corrected_courts_list['plaintiff_country_2']
+courts_list['defendat_country_1'] = corrected_courts_list['defendant_country_1']
+
+courts_list['court_match_d'] = corrected_courts_list['Court_match_d']
+courts_list['court_match_p'] = corrected_courts_list['Court_match_p']
+
+corrected_courts_list['plaintiff_country_1'][28]
+assert courts_list['plaintiff_country_1'][28] == corrected_courts_list['plaintiff_country_1'][28]
+
+
 courts_list_agg = courts_list[['Номер дела', 'courts_in_text', 'ukr_court', 'ukr_court_matches']].groupby('Номер дела', as_index=False).agg({'ukr_court' : [('ukr_court' , 'sum')], 'ukr_court_matches' :[('ukr_court_matches',lambda x:list(x))],
                                                              'courts_in_text': [('courts_in_text', lambda x:list(x))]})
 
@@ -167,9 +180,43 @@ courts_list_agg.columns = courts_list_agg.columns.get_level_values(1)
 courts_list_agg.rename({'': 'Номер дела'}, axis=1, inplace=True)
 courts_list_agg['ukr_court'].value_counts()
 
+fl_countries = courts_list[['Номер дела', 'plaintiff_country_1', 'plaintiff_country_2', 'defendat_country_1', 'court_match_d', 'court_match_p']].groupby('Номер дела', as_index=False).agg(list)
+
+
+from helper_functions import unique_list
+
+def unique_list(the_list):
+    if not isinstance(the_list, list):
+        out_list = the_list
+    else:
+        out_list = list(dict.fromkeys(the_list))
+    return out_list
+
+fl_countries = fl_countries.applymap(unique_list).applymap(flatten_lists)
+final_dataset = final_dataset.sort_values('Номер дела')
+
+assert (final_dataset['Номер дела'].reset_index(drop=True) == fl_countries['Номер дела']).all()
+
+final_dataset['plaintiff_country_1'] = fl_countries['plaintiff_country_1']
+final_dataset['plaintiff_country_2'] = fl_countries['plaintiff_country_2']
+final_dataset['defendant_country_1'] = fl_countries['defendat_country_1']
+final_dataset['court_match_d'] = fl_countries['court_match_d']
+final_dataset['court_match_p'] = fl_countries['court_match_p']
+
+
+
+
 
 final_dataset = pd.merge(final_dataset, courts_list_agg, on = 'Номер дела', how='left')
 
 assert final_dataset.ukr_court.isna().sum() == 0, 'Some cases were not joined'
 
 final_dataset.to_csv('final_dataset_3.csv', index=False, encoding='utf-8')
+
+
+# Replace some columns by their manually corrected versions
+
+final_dataset = pd.read_csv('final_dataset_3.csv')
+
+final_dataset
+corrected_dataset = pd.read_excel('courts_list_manual_VK_OK_final.xlsx')
