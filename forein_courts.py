@@ -135,6 +135,27 @@ courts_list = pd.read_excel('courts_list.xlsx')
 corrected_courts_list = pd.read_excel('courts_list_manual_VK_OK_final.xlsx')
 corrected_courts_list_colors = pd.read_excel('courts_list_manual_VK_OK_final_copy.xlsx')
 
+
+
+pc_1_yellow = corrected_courts_list_colors['plaintiff_country_1'] == 'Yellow'
+pc_2_yellow = corrected_courts_list_colors['plaintiff_country_2'] == 'Yellow'
+dc_1_yellow = corrected_courts_list_colors['defendant_country_1'] == 'Yellow'
+
+aux_df = pd.DataFrame({'Номер дела': corrected_courts_list['Номер дела'], 'plaintiff_country_1_changed': pc_1_yellow,
+               'plaintiff_country_1': corrected_courts_list['plaintiff_country_1'] } )
+
+aux_df = aux_df.loc[aux_df['plaintiff_country_1_changed'] == True].drop_duplicates()
+aux_df.value_counts()
+
+aux_df = pd.merge(corrected_courts_list[['Номер дела']], aux_df, on = 'Номер дела', how='left')
+
+aux_df.groupby(['Номер дела']).size().sort_values(ascending=True)[-13:-1]
+aux_df.plaintiff_country_1_changed.isna().sum()
+aux_df['Номер дела'].dtype
+corrected_courts_list['Номер дела'].dtype
+type(corrected_courts_list[['Номер дела']])
+
+
 courts_list['plaintiff_country_1_not_determ'] = (corrected_courts_list_colors['plaintiff_country_1'] == 'Blue')*1
 courts_list['plaintiff_country_2_not_determ'] = (corrected_courts_list_colors['plaintiff_country_2'] == 'Blue')*1
 courts_list['defendant_country_1_not_determ'] = (corrected_courts_list_colors['defendant_country_1'] == 'Blue')*1
@@ -189,6 +210,7 @@ courts_list_agg.rename({'': 'Номер дела'}, axis=1, inplace=True)
 courts_list_agg['ukr_court'].value_counts()
 
 #%%
+fl_countries = courts_list[['Номер дела', 'plaintiff_country_1', 'plaintiff_country_2', 'defendant_country_1', 'court_match_d', 'court_match_p']].groupby('Номер дела', as_index=False).agg(list)
 
 fl_countries = courts_list[['Номер дела', 'plaintiff_country_1', 'plaintiff_country_2', 'defendat_country_1', 'court_match_d', 'court_match_p']].groupby('Номер дела', as_index=False).agg(list)
 
@@ -197,9 +219,22 @@ from helper_functions import unique_list
 
 
 fl_countries = fl_countries.applymap(unique_list).applymap(flatten_lists)
+fl_countries['']
+
 final_dataset = final_dataset.sort_values('Номер дела')
 
 assert (final_dataset['Номер дела'].reset_index(drop=True) == fl_countries['Номер дела']).all()
+
+(final_dataset['plaintiff_country_1'].reset_index(drop=True) == fl_countries['plaintiff_country_1']).all()
+
+dif_val = (final_dataset['plaintiff_country_1'].reset_index(drop=True) != fl_countries['plaintiff_country_1'] ) & ~ (final_dataset['plaintiff_country_1'].isna() & fl_countries['plaintiff_country_1'].isna())
+
+fl_countries.loc[dif_val].sort_values('Номер дела')
+dif_val.sum()
+final_dataset.reset_index().loc[dif_val, ['plaintiff_country_1', 'plaintiff_country_2', 'plaintiff_country_3', 'Номер дела']].sort_values('Номер дела')
+
+fl_countries['plaintiff_country_1'].apply(lambda x: len(x) if isinstance(x, list) else 0).sum()
+np.nan == np.nan
 
 final_dataset['plaintiff_country_1'] = fl_countries['plaintiff_country_1']
 final_dataset['plaintiff_country_2'] = fl_countries['plaintiff_country_2']
