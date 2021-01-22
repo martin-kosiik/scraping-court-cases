@@ -1,4 +1,4 @@
-#import numpy as np
+import numpy as np
 
 def flatten_lists(the_list):
     #import numpy as np
@@ -17,4 +17,12 @@ def unique_list(the_list):
         out_list = the_list
     else:
         out_list = list(dict.fromkeys(the_list))
+    return out_list
+
+def unique_list_hash(the_list):
+    from itertools import groupby
+    if not isinstance(the_list, list):
+        out_list = the_list
+    else:
+        out_list = [k for k,v in groupby(sorted(the_list, key=repr))]
     return out_list
