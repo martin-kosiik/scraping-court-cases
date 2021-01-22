@@ -5,6 +5,7 @@ import numpy as np
 import pickle
 import regex
 import itertools
+from helper_functions import unique_list, flatten_lists, unique_list_hash
 
 
 working_directory = "C:/Users/marti/OneDrive/Plocha/RA_work/scraping_court_cases"
@@ -137,24 +138,36 @@ corrected_courts_list_colors = pd.read_excel('courts_list_manual_VK_OK_final_cop
 
 
 
-pc_1_yellow = corrected_courts_list_colors['plaintiff_country_1'] == 'Yellow'
-pc_2_yellow = corrected_courts_list_colors['plaintiff_country_2'] == 'Yellow'
-dc_1_yellow = corrected_courts_list_colors['defendant_country_1'] == 'Yellow'
 
-aux_df = pd.DataFrame({'Номер дела': corrected_courts_list['Номер дела'], 'plaintiff_country_1_changed': pc_1_yellow,
-               'plaintiff_country_1': corrected_courts_list['plaintiff_country_1'] } )
+def correct_all_rulings(var_name = 'plaintiff_country_1', df=corrected_courts_list, df_col=corrected_courts_list_colors):
+    df_c = df.copy(deep=True)
+    yellow = df_col[var_name] == 'Yellow'
+    aux_df = pd.DataFrame({'Номер дела': df_c['Номер дела'], 'var_changed': yellow,
+                   var_name: df_c.loc[:,var_name] } )
+    aux_df = aux_df.loc[aux_df['var_changed'] == True, :].drop_duplicates()
+    aux_df = aux_df[[var_name, 'Номер дела']].groupby(['Номер дела']).agg(list).applymap(unique_list).applymap(flatten_lists).reset_index()
+    aux_df = pd.merge(df_c[['Номер дела']], aux_df, on = 'Номер дела', how='left')
+    aux_df = aux_df.groupby('Номер дела').apply(lambda x: x[~x.isna()]).reset_index(drop=True)
+    df_c.loc[~aux_df[var_name].isna(), var_name] = aux_df.loc[~aux_df[var_name].isna(), var_name]
+    return df_c
 
-aux_df = aux_df.loc[aux_df['plaintiff_country_1_changed'] == True].drop_duplicates()
-aux_df.value_counts()
+ #aux_df[50:100]
 
-aux_df = pd.merge(corrected_courts_list[['Номер дела']], aux_df, on = 'Номер дела', how='left')
+corrected_courts_list_new = correct_all_rulings()
+corrected_courts_list_new_ = correct_all_rulings('plaintiff_country_2', corrected_courts_list_new)
+corrected_courts_list_new = correct_all_rulings('defendant_country_1', corrected_courts_list_new)#.copy()
 
-aux_df.groupby(['Номер дела']).size().sort_values(ascending=True)[-13:-1]
-aux_df.plaintiff_country_1_changed.isna().sum()
-aux_df['Номер дела'].dtype
-corrected_courts_list['Номер дела'].dtype
-type(corrected_courts_list[['Номер дела']])
+#(aux_df['plaintiff_country_1'].apply(lambda x: len(x) if isinstance(x, list) else 0) >0).sum()
+#(df_c.groupby(['Номер дела']).agg(list).applymap(unique_list_hash).applymap(flatten_lists)['plaintiff_country_1'].apply(lambda x: len(x) if isinstance(x, list) else 0) >0).sum()
+(corrected_courts_list.groupby(['Номер дела']).agg(list).applymap(unique_list_hash).applymap(flatten_lists)['plaintiff_country_1'].apply(lambda x: len(x) if isinstance(x, list) else 0) >0).sum()
+(corrected_courts_list_new.groupby(['Номер дела']).agg(list).applymap(unique_list_hash).applymap(flatten_lists)['plaintiff_country_1'].apply(lambda x: len(x) if isinstance(x, list) else 0) >0).sum()
 
+(corrected_courts_list.groupby(['Номер дела']).agg(list).applymap(unique_list_hash).applymap(flatten_lists)['defendant_country_1'].apply(lambda x: len(x) if isinstance(x, list) else 0) >0).sum()
+(corrected_courts_list_new.groupby(['Номер дела']).agg(list).applymap(unique_list_hash).applymap(flatten_lists)['defendant_country_1'].apply(lambda x: len(x) if isinstance(x, list) else 0) >0).sum()
+
+#corrected_courts_list['plaintiff_country_1']
+
+#aux_df.groupby(['Номер дела']).size().sort_values(ascending=True)[-13:-1]
 
 courts_list['plaintiff_country_1_not_determ'] = (corrected_courts_list_colors['plaintiff_country_1'] == 'Blue')*1
 courts_list['plaintiff_country_2_not_determ'] = (corrected_courts_list_colors['plaintiff_country_2'] == 'Blue')*1
@@ -190,15 +203,26 @@ assert all(courts_list.loc[tpp_matches_full | tpp_matches, 'ukr_court_matches'].
 
 courts_list.loc[tpp_matches_full | tpp_matches, 'ukr_court_matches'] = 'тпп Украины'
 
-courts_list['plaintiff_country_1'] = corrected_courts_list['plaintiff_country_1']
-courts_list['plaintiff_country_2'] = corrected_courts_list['plaintiff_country_2']
-courts_list['defendat_country_1'] = corrected_courts_list['defendant_country_1']
+courts_list = courts_list.assign(plaintiff_country_1=corrected_courts_list_new['plaintiff_country_1'],
+                                 plaintiff_country_2=corrected_courts_list_new['plaintiff_country_2'],
+                                 defendant_country_1=corrected_courts_list_new['defendant_country_1'])
+
+
+courts_list['plaintiff_country_1'] = corrected_courts_list_new['plaintiff_country_1'].copy()
+courts_list['plaintiff_country_2'] = corrected_courts_list['plaintiff_country_2'].copy()
+courts_list['defendat_country_1'] = corrected_courts_list['defendant_country_1'].copy()
 
 courts_list['court_match_d'] = corrected_courts_list['Court_match_d']
 courts_list['court_match_p'] = corrected_courts_list['Court_match_p']
 
 corrected_courts_list['plaintiff_country_1'][28]
 assert courts_list['plaintiff_country_1'][28] == corrected_courts_list['plaintiff_country_1'][28]
+(courts_list.groupby(['Номер дела']).agg(list).applymap(unique_list_hash).applymap(flatten_lists)['plaintiff_country_1'].apply(lambda x: len(x) if isinstance(x, list) else 0) >0).sum()
+(courts_list.groupby(['Номер дела']).agg(list).applymap(unique_list_hash).applymap(flatten_lists)['defendant_country_1'].apply(lambda x: len(x) if isinstance(x, list) else 0) >0).sum()
+
+
+(corrected_courts_list.groupby(['Номер дела']).agg(list).applymap(unique_list_hash).applymap(flatten_lists)['plaintiff_country_1'].apply(lambda x: len(x) if isinstance(x, list) else 0) >0).sum()
+
 
 #%%
 
@@ -210,16 +234,13 @@ courts_list_agg.rename({'': 'Номер дела'}, axis=1, inplace=True)
 courts_list_agg['ukr_court'].value_counts()
 
 #%%
+#fl_countries = courts_list[['Номер дела', 'plaintiff_country_1', 'plaintiff_country_2', 'defendant_country_1', 'court_match_d', 'court_match_p']].groupby('Номер дела', as_index=False).agg(list)
+
 fl_countries = courts_list[['Номер дела', 'plaintiff_country_1', 'plaintiff_country_2', 'defendant_country_1', 'court_match_d', 'court_match_p']].groupby('Номер дела', as_index=False).agg(list)
 
-fl_countries = courts_list[['Номер дела', 'plaintiff_country_1', 'plaintiff_country_2', 'defendat_country_1', 'court_match_d', 'court_match_p']].groupby('Номер дела', as_index=False).agg(list)
 
 
-from helper_functions import unique_list
-
-
-fl_countries = fl_countries.applymap(unique_list).applymap(flatten_lists)
-fl_countries['']
+fl_countries = fl_countries.applymap(unique_list_hash).applymap(flatten_lists)
 
 final_dataset = final_dataset.sort_values('Номер дела')
 
@@ -227,18 +248,17 @@ assert (final_dataset['Номер дела'].reset_index(drop=True) == fl_countr
 
 (final_dataset['plaintiff_country_1'].reset_index(drop=True) == fl_countries['plaintiff_country_1']).all()
 
-dif_val = (final_dataset['plaintiff_country_1'].reset_index(drop=True) != fl_countries['plaintiff_country_1'] ) & ~ (final_dataset['plaintiff_country_1'].isna() & fl_countries['plaintiff_country_1'].isna())
 
-fl_countries.loc[dif_val].sort_values('Номер дела')
-dif_val.sum()
-final_dataset.reset_index().loc[dif_val, ['plaintiff_country_1', 'plaintiff_country_2', 'plaintiff_country_3', 'Номер дела']].sort_values('Номер дела')
+(fl_countries['plaintiff_country_1'].apply(lambda x: len(x) if isinstance(x, list) else 0) > 0).sum()
+(fl_countries['defendant_country_1'].apply(lambda x: len(x) if isinstance(x, list) else 0) > 0).sum()
 
-fl_countries['plaintiff_country_1'].apply(lambda x: len(x) if isinstance(x, list) else 0).sum()
-np.nan == np.nan
+#np.nan == np.nan
 
-final_dataset['plaintiff_country_1'] = fl_countries['plaintiff_country_1']
-final_dataset['plaintiff_country_2'] = fl_countries['plaintiff_country_2']
-final_dataset['defendant_country_1'] = fl_countries['defendat_country_1']
+
+
+final_dataset['plaintiff_country_1'] = fl_countries['plaintiff_country_1'].copy()
+final_dataset['plaintiff_country_2'] = fl_countries['plaintiff_country_2'].copy()
+final_dataset['defendant_country_1'] = fl_countries['defendant_country_1'].copy()
 final_dataset['court_match_d'] = fl_countries['court_match_d']
 final_dataset['court_match_p'] = fl_countries['court_match_p']
 
@@ -265,12 +285,30 @@ final_dataset = pd.merge(final_dataset, courts_list_agg, on = 'Номер дел
 
 assert final_dataset.ukr_court.isna().sum() == 0, 'Some cases were not joined'
 
-final_dataset.to_csv('final_dataset_3_corrected.csv', index=False, encoding='utf-8')
+(final_dataset['plaintiff_country_1'].apply(lambda x: len(x) if isinstance(x, list) else 0) >0).sum()
+(final_dataset['plaintiff_country_2'].apply(lambda x: len(x) if isinstance(x, list) else 0) >0).sum()
+(final_dataset['defendant_country_1'].apply(lambda x: len(x) if isinstance(x, list) else 0) >0).sum()
 
+fil_out_1 = final_dataset['plaintiff_country_1'].apply(lambda x: len(x) if isinstance(x, list) else 0) >0
+fil_out_2 = final_dataset['plaintiff_country_2'].apply(lambda x: len(x) if isinstance(x, list) else 0) >0
+fil_out_3 = final_dataset['defendant_country_1'].apply(lambda x: len(x) if isinstance(x, list) else 0) >0
+
+final_dataset.shape
+
+final_dataset = final_dataset[(~fil_out_1) & (~fil_out_2) & (~fil_out_3)  ]
+
+final_dataset.shape
+
+final_dataset.to_csv('final_dataset_3_corrected_2_filter.csv', index=False, encoding='utf-8')
+
+sub_set =final_dataset['plaintiff_country_1'].apply(lambda x: len(x) if isinstance(x, list) else 0) >0
+final_dataset[sub_set]['Номер дела']
+#114
 
 # Replace some columns by their manually corrected versions
 
-final_dataset = pd.read_csv('final_dataset_3.csv')
+fd = pd.read_csv('final_dataset_3_corrected.csv')
+(fd['plaintiff_country_1'].apply(lambda x: len(x) if isinstance(x, list) else 0) >0).sum()
 
 final_dataset
 corrected_dataset = pd.read_excel('courts_list_manual_VK_OK_final.xlsx')
