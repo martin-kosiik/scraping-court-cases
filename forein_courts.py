@@ -307,6 +307,36 @@ final_dataset[sub_set]['Номер дела']
 
 # Replace some columns by their manually corrected versions
 
+
+fd = pd.read_csv('final_dataset_3_corrected_2_filter.csv')
+fd.shape
+corrected_courts_list = pd.read_excel('courts_list_manual_VK_OK_2.xlsx')
+
+corrected_courts_list.columns
+
+cl = corrected_courts_list[['Номер дела', 'Rajon_p', 'Oblast_p', 'Rajon_d', 'Oblast_d']]
+cl.shape
+
+cl = cl.groupby('Номер дела', as_index=False).agg(list).applymap(unique_list).applymap(lambda the_list: [x for x in the_list if x == x] if isinstance(the_list, list) else the_list).applymap(flatten_lists)
+
+cl.Oblast_d.apply(type).value_counts()
+
+# just to check everything is correct
+#corrected_courts_list = pd.merge(corrected_courts_list, cl, on = 'Номер дела', how='left')
+
+
+fd_merged = pd.merge(fd, cl, on = 'Номер дела', how='left')
+
+fd_merged.to_csv('final_dataset_3_corrected_2_filter_raions.csv', index=False, encoding='utf-8')
+fd_merged.to_excel('final_dataset_3_corrected_2_filter_raions.xlsx', index=False, encoding='utf-8')
+
+
+
+
+
+
+
+
 fd = pd.read_csv('final_dataset_3_corrected.csv')
 (fd['plaintiff_country_1'].apply(lambda x: len(x) if isinstance(x, list) else 0) >0).sum()
 
