@@ -137,6 +137,9 @@ corrected_courts_list = pd.read_excel('courts_list_manual_VK_OK_final.xlsx')
 corrected_courts_list_colors = pd.read_excel('courts_list_manual_VK_OK_final_copy.xlsx')
 
 
+final_dataset[final_dataset['Номер дела'] == 'А36-4473/2005']
+courts_list[courts_list['Номер дела'] == 'А36-4473/2005']
+corrected_courts_list[corrected_courts_list['Номер дела'] == 'А36-4473/2005']
 
 
 def correct_all_rulings(var_name = 'plaintiff_country_1', df=corrected_courts_list, df_col=corrected_courts_list_colors):
@@ -208,9 +211,9 @@ courts_list = courts_list.assign(plaintiff_country_1=corrected_courts_list_new['
                                  defendant_country_1=corrected_courts_list_new['defendant_country_1'])
 
 
-courts_list['plaintiff_country_1'] = corrected_courts_list_new['plaintiff_country_1'].copy()
-courts_list['plaintiff_country_2'] = corrected_courts_list['plaintiff_country_2'].copy()
-courts_list['defendat_country_1'] = corrected_courts_list['defendant_country_1'].copy()
+#courts_list['plaintiff_country_1'] = corrected_courts_list_new['plaintiff_country_1'].copy()
+#courts_list['plaintiff_country_2'] = corrected_courts_list['plaintiff_country_2'].copy()
+#courts_list['defendat_country_1'] = corrected_courts_list['defendant_country_1'].copy()
 
 courts_list['court_match_d'] = corrected_courts_list['Court_match_d']
 courts_list['court_match_p'] = corrected_courts_list['Court_match_p']
@@ -242,9 +245,17 @@ fl_countries = courts_list[['Номер дела', 'plaintiff_country_1', 'plain
 
 fl_countries = fl_countries.applymap(unique_list_hash).applymap(flatten_lists)
 
-final_dataset = final_dataset.sort_values('Номер дела')
+fl_countries[fl_countries['Номер дела'] == 'А36-4473/2005']
 
-assert (final_dataset['Номер дела'].reset_index(drop=True) == fl_countries['Номер дела']).all()
+final_dataset[final_dataset['Номер дела'] == 'А36-4473/2005']
+
+final_dataset = final_dataset.sort_values('Номер дела').reset_index(drop=True)
+
+final_dataset['Номер дела']
+
+fl_countries['Номер дела']
+
+assert (final_dataset['Номер дела'] == fl_countries['Номер дела']).all()
 
 (final_dataset['plaintiff_country_1'].reset_index(drop=True) == fl_countries['plaintiff_country_1']).all()
 
@@ -253,7 +264,6 @@ assert (final_dataset['Номер дела'].reset_index(drop=True) == fl_countr
 (fl_countries['defendant_country_1'].apply(lambda x: len(x) if isinstance(x, list) else 0) > 0).sum()
 
 #np.nan == np.nan
-
 
 
 final_dataset['plaintiff_country_1'] = fl_countries['plaintiff_country_1'].copy()
@@ -299,33 +309,66 @@ final_dataset = final_dataset[(~fil_out_1) & (~fil_out_2) & (~fil_out_3)  ]
 
 final_dataset.shape
 
-final_dataset.to_csv('final_dataset_3_corrected_2_filter.csv', index=False, encoding='utf-8')
+final_dataset.to_csv('final_dataset_3_corrected_2_filter_right.csv', index=False, encoding='utf-8')
 
 sub_set =final_dataset['plaintiff_country_1'].apply(lambda x: len(x) if isinstance(x, list) else 0) >0
 final_dataset[sub_set]['Номер дела']
 #114
 
 # Replace some columns by their manually corrected versions
+pd.set_option('display.max_columns', None)
+
+# final_dataset_3_corrected is wrong
+#
+
+fd_2 = pd.read_csv('final_dataset_3.csv')
+fd_2[fd_2['Номер дела'] == 'А36-4473/2005']
 
 
-fd = pd.read_csv('final_dataset_3_corrected_2_filter.csv')
-fd.shape
+fd = pd.read_csv('final_dataset_3_corrected_2_filter_right.csv')
+fd[fd['Номер дела'] == 'А36-4473/2005']
+
 corrected_courts_list = pd.read_excel('courts_list_manual_VK_OK_2.xlsx')
 
-corrected_courts_list.columns
+corrected_courts_list
 
 cl = corrected_courts_list[['Номер дела', 'Rajon_p', 'Oblast_p', 'Rajon_d', 'Oblast_d']]
 cl.shape
 
-cl = cl.groupby('Номер дела', as_index=False).agg(list).applymap(unique_list).applymap(lambda the_list: [x for x in the_list if x == x] if isinstance(the_list, list) else the_list).applymap(flatten_lists)
+def_pl_dum = 'p'
+cl = corrected_courts_list.loc[corrected_courts_list['Court_match_' +def_pl_dum ] != 0 , ['Court_match_'+def_pl_dum, 'Rajon_'+def_pl_dum, 'Oblast_'+def_pl_dum]]
 
-cl.Oblast_d.apply(type).value_counts()
+cl = cl.groupby('Court_match_'+def_pl_dum, as_index=False).agg(list).applymap(lambda the_list:  [x for x in the_list if x == x] if isinstance(the_list, list) else the_list).applymap(unique_list).applymap(flatten_lists)
+
+
+cl
+
+fd.shape
+fd_merged = pd.merge(fd, cl, left_on='court_match_p', right_on = 'Court_match_p', how='left')
+
+fd_merged.shape
+
+cl = corrected_courts_list[['Номер дела', 'Rajon_p', 'Oblast_p', 'Rajon_d', 'Oblast_d']]
+cl.shape
+
+def_pl_dum = 'd'
+cl = corrected_courts_list.loc[corrected_courts_list['Court_match_' +def_pl_dum ] != 0 , ['Court_match_'+def_pl_dum, 'Rajon_'+def_pl_dum, 'Oblast_'+def_pl_dum]]
+
+cl = cl.groupby('Court_match_'+def_pl_dum, as_index=False).agg(list).applymap(lambda the_list:  [x for x in the_list if x == x] if isinstance(the_list, list) else the_list).applymap(unique_list).applymap(flatten_lists)
+
+fd_merged = pd.merge(fd_merged, cl, left_on='court_match_d', right_on = 'Court_match_d', how='left')
+
+
+fd_merged
+
+#cl = cl.groupby('Court_match_'+def_pl_dum, as_index=False).agg(list).applymap(unique_list).applymap(lambda the_list: [x for x in the_list if x == x] if isinstance(the_list, list) else the_list).applymap(flatten_lists)
+
 
 # just to check everything is correct
 #corrected_courts_list = pd.merge(corrected_courts_list, cl, on = 'Номер дела', how='left')
 
 
-fd_merged = pd.merge(fd, cl, on = 'Номер дела', how='left')
+fd_merged = fd_merged.drop(['Court_match_d', 'Court_match_d'], axis=1)
 
 fd_merged.to_csv('final_dataset_3_corrected_2_filter_raions.csv', index=False, encoding='utf-8')
 fd_merged.to_excel('final_dataset_3_corrected_2_filter_raions.xlsx', index=False, encoding='utf-8')
@@ -333,6 +376,12 @@ fd_merged.to_excel('final_dataset_3_corrected_2_filter_raions.xlsx', index=False
 
 
 
+
+pd.options.display.html.table_schema = True
+pd.options.display.max_rows = 200
+
+
+fd = pd.read_csv('final_dataset_3_corrected_2_filter_raions.csv')
 
 
 
