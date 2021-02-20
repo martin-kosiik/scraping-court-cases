@@ -328,50 +328,84 @@ fd_2[fd_2['Номер дела'] == 'А36-4473/2005']
 fd = pd.read_csv('final_dataset_3_corrected_2_filter_right.csv')
 fd[fd['Номер дела'] == 'А36-4473/2005']
 
-corrected_courts_list = pd.read_excel('courts_list_manual_VK_OK_2.xlsx')
-
-corrected_courts_list
-
-cl = corrected_courts_list[['Номер дела', 'Rajon_p', 'Oblast_p', 'Rajon_d', 'Oblast_d']]
-cl.shape
-
-def_pl_dum = 'p'
-cl = corrected_courts_list.loc[corrected_courts_list['Court_match_' +def_pl_dum ] != 0 , ['Court_match_'+def_pl_dum, 'Rajon_'+def_pl_dum, 'Oblast_'+def_pl_dum]]
-
-cl = cl.groupby('Court_match_'+def_pl_dum, as_index=False).agg(list).applymap(lambda the_list:  [x for x in the_list if x == x] if isinstance(the_list, list) else the_list).applymap(unique_list).applymap(flatten_lists)
+#А60-10006/2007
+fd[fd['Номер дела'] == 'А60-10006/2007']
+fd[fd['Номер дела'] == 'А45-1805/2017']
 
 
-cl
 
-fd.shape
-fd_merged = pd.merge(fd, cl, left_on='court_match_p', right_on = 'Court_match_p', how='left')
+#corrected_courts_list = pd.read_excel('courts_list_manual_VK_OK_2.xlsx')
+#corrected_courts_list = pd.read_stata('courts_list_manual_VK_OK_3.dta')
 
-fd_merged.shape
-
-cl = corrected_courts_list[['Номер дела', 'Rajon_p', 'Oblast_p', 'Rajon_d', 'Oblast_d']]
-cl.shape
-
-def_pl_dum = 'd'
-cl = corrected_courts_list.loc[corrected_courts_list['Court_match_' +def_pl_dum ] != 0 , ['Court_match_'+def_pl_dum, 'Rajon_'+def_pl_dum, 'Oblast_'+def_pl_dum]]
-
-cl = cl.groupby('Court_match_'+def_pl_dum, as_index=False).agg(list).applymap(lambda the_list:  [x for x in the_list if x == x] if isinstance(the_list, list) else the_list).applymap(unique_list).applymap(flatten_lists)
-
-fd_merged = pd.merge(fd_merged, cl, left_on='court_match_d', right_on = 'Court_match_d', how='left')
+#corrected_courts_list = pd.read_csv('courts_list_manual_VK_OK_3.csv')
+corrected_courts_list = pd.read_csv('courts_list_manual_VK_OK_r_3.csv')
 
 
-fd_merged
+pd.__version__
+#
+# corrected_courts_list
+#
+# cl = corrected_courts_list[['Номер дела', 'Rajon_p', 'Oblast_p', 'Rajon_d', 'Oblast_d']]
+# cl.shape
+#
+# def_pl_dum = 'p'
+# cl = corrected_courts_list.loc[corrected_courts_list['Court_match_' +def_pl_dum ] != 0 , ['Court_match_'+def_pl_dum, 'Rajon_'+def_pl_dum, 'Oblast_'+def_pl_dum]]
+#
+# cl = cl.groupby('Court_match_'+def_pl_dum, as_index=False).agg(list).applymap(lambda the_list:  [x for x in the_list if x == x] if isinstance(the_list, list) else the_list).applymap(unique_list).applymap(flatten_lists)
+#
+#
+# cl
+#
+# fd.shape
+# fd_merged = pd.merge(fd, cl, left_on='court_match_p', right_on = 'Court_match_p', how='left')
+#
+# fd_merged.shape
+#
+# cl = corrected_courts_list[['Номер дела', 'Rajon_p', 'Oblast_p', 'Rajon_d', 'Oblast_d']]
+# cl.shape
+#
+# def_pl_dum = 'd'
+# cl = corrected_courts_list.loc[corrected_courts_list['Court_match_' +def_pl_dum ] != 0 , ['Court_match_'+def_pl_dum, 'Rajon_'+def_pl_dum, 'Oblast_'+def_pl_dum]]
+#
+# cl = cl.groupby('Court_match_'+def_pl_dum, as_index=False).agg(list).applymap(lambda the_list:  [x for x in the_list if x == x] if isinstance(the_list, list) else the_list).applymap(unique_list).applymap(flatten_lists)
+#
+# fd_merged = pd.merge(fd_merged, cl, left_on='court_match_d', right_on = 'Court_match_d', how='left')
+#
+#
+# fd_merged
 
-#cl = cl.groupby('Court_match_'+def_pl_dum, as_index=False).agg(list).applymap(unique_list).applymap(lambda the_list: [x for x in the_list if x == x] if isinstance(the_list, list) else the_list).applymap(flatten_lists)
-
+#fd_merged = fd_merged.drop(['Court_match_d', 'Court_match_d'], axis=1)
 
 # just to check everything is correct
 #corrected_courts_list = pd.merge(corrected_courts_list, cl, on = 'Номер дела', how='left')
 
+corrected_courts_list.columns
 
-fd_merged = fd_merged.drop(['Court_match_d', 'Court_match_d'], axis=1)
 
-fd_merged.to_csv('final_dataset_3_corrected_2_filter_raions.csv', index=False, encoding='utf-8')
-fd_merged.to_excel('final_dataset_3_corrected_2_filter_raions.xlsx', index=False, encoding='utf-8')
+vars_to_subset = ['Номердела'] +vars_to_subset_2
+
+vars_to_subset = ['Номердела'] + corrected_courts_list.columns[14:].tolist()
+vars_to_subset_copy = vars_to_subset.copy()
+
+cl = corrected_courts_list[['Номердела', 'Rajon_p', 'Oblast_p', 'Rajon_d', 'Oblast_d', 'share_ethnic_bulgarians_p']]
+cl = corrected_courts_list[vars_to_subset]
+
+cl.shape
+
+cl = cl.groupby('Номердела', as_index=False).agg(list).applymap(unique_list).applymap(lambda the_list: [x for x in the_list if x == x] if isinstance(the_list, list) else the_list).applymap(flatten_lists)
+
+cl.Oblast_d.apply(type).value_counts()
+cl[50:100]
+# just to check everything is correct
+#corrected_courts_list = pd.merge(corrected_courts_list, cl, on = 'Номер дела', how='left')
+
+
+fd_merged = pd.merge(fd, cl, left_on = 'Номер дела', right_on = 'Номердела',  how='left')
+fd_merged.shape
+fd.shape
+
+fd_merged.to_csv('final_dataset_3_corrected_2_filter_additional_info.csv', index=False, encoding='utf-8')
+fd_merged.to_excel('final_dataset_3_corrected_2_filter_additional_info.xlsx', index=False, encoding='utf-8')
 
 
 
